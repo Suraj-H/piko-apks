@@ -2,66 +2,39 @@ from apkmirror import Version
 from utils import patch_apk
 
 
-def build_apks(latest_version: Version):
+def build_apks(latest_version: Version, config: dict) -> list[str]:
     # patch
     apk = "big_file_merged.apk"
-    integrations = "bins/integrations.apk"
-    patches = "bins/patches.jar"
-    cli = "bins/cli.jar"
+    patches_filename = config["binaries"]["patches"].get("filename", "patches.rvp")
+    cli_filename = config["binaries"]["cli"].get("filename", "cli.jar")
+    patches = f"bins/{patches_filename}"
+    cli = f"bins/{cli_filename}"
 
-    common_includes = [
-        "Enable app downgrading",
-        "Hide FAB",
-        "Disable chirp font",
-        "Add ability to copy media link",
-        "Hide Banner",
-        "Hide promote button",
-        "Hide Community Notes",
-        "Delete from database",
-        "Customize Navigation Bar items",
-        "Remove premium upsell",
-        "Control video auto scroll",
-        "Force enable translate",
-    ]
+    common_includes = config["patches"].get("common_includes", [])
+    common_excludes = config["patches"].get("common_excludes", [])
+    exclusive = config["patches"].get("exclusive", False)
+    extra_args = config["patches"].get("extra_args", [])
 
-    common_excludes = []
+    generated_files = []
 
-    patch_apk(
-        cli,
-        integrations,
-        patches,
-        apk,
-        includes=common_includes,
-        excludes=common_excludes,
-        out=f"x-piko-material-you-v{latest_version.version}.apk",
-    )
+    for variant in config["variants"]:
+        name = variant["name"]
+        includes = common_includes + variant.get("includes", [])
+        excludes = common_excludes + variant.get("excludes", [])
+        variant_extra_args = extra_args + variant.get("extra_args", [])
+        out_filename = f"{name}-v{latest_version.version}.apk"
 
-    patch_apk(
-        cli,
-        integrations,
-        patches,
-        apk,
-        includes=common_includes,
-        excludes=["Dynamic color"] + common_excludes,
-        out=f"x-piko-v{latest_version.version}.apk",
-    )
+        print(f"Building {name}...")
+        patch_apk(
+            cli,
+            patches,
+            apk,
+            includes=includes,
+            excludes=excludes,
+            out=out_filename,
+            exclusive=exclusive,
+            extra_args=variant_extra_args,
+        )
+        generated_files.append(out_filename)
 
-    patch_apk(
-        cli,
-        integrations,
-        patches,
-        apk,
-        includes=["Bring back twitter"] + common_includes,
-        excludes=common_excludes,
-        out=f"twitter-piko-material-you-v{latest_version.version}.apk",
-    )
-
-    patch_apk(
-        cli,
-        integrations,
-        patches,
-        apk,
-        includes=["Bring back twitter"] + common_includes,
-        excludes=["Dynamic color"] + common_excludes,
-        out=f"twitter-piko-v{latest_version.version}.apk",
-    )
+    return generated_files

@@ -1,0 +1,57 @@
+[project]
+repo = "crimera/twitter-apk"
+apkmirror_url = "https://www.apkmirror.com/apk/x-corp/twitter/"
+publish = false
+telegram_report = false
+
+[binaries.cli]
+repo = "ReVanced/revanced-cli"
+regex = "^revanced-cli.*jar$"
+filename = "cli.jar"
+version = "v5.0.1"
+
+[binaries.patches]
+repo = "crimera/piko"
+regex = ".*\\.rvp$"
+filename = "patches.rvp"
+include_prerelease = true
+
+[binaries.apkeditor]
+repo = "REAndroid/APKEditor"
+regex = "APKEditor"
+filename = "apkeditor.jar"
+
+[patches]
+exclusive = false
+extra_args = []
+common_includes = [
+    "Enable app downgrading",
+    "Hide FAB",
+    "Disable chirp font",
+    "Add ability to copy media link",
+    "Hide Banner",
+    "Hide promote button",
+    "Hide Community Notes",
+    "Delete from database",
+    "Customize Navigation Bar items",
+    "Remove premium upsell",
+    "Control video auto scroll",
+    "Force enable translate",
+]
+common_excludes = []
+
+[[variants]]
+name = "x-piko-material-you"
+
+[[variants]]
+name = "x-piko"
+excludes = ["Dynamic color"]
+
+[[variants]]
+name = "twitter-piko-material-you"
+includes = ["Bring back twitter"]
+
+[[variants]]
+name = "twitter-piko"
+includes = ["Bring back twitter"]
+excludes = ["Dynamic color"]

@@ -3,6 +3,7 @@ import shutil
 import requests
 import subprocess
 import sys
+from typing import Optional, List
 from github import get_last_build_version
 
 
@@ -25,11 +26,11 @@ def send_message(message: str, token: str, chat_id: str, thread_id: str):
     requests.post(endpoint, data=data)
 
 
-def report_to_telegram():
+def report_to_telegram(repo_url: str):
     tg_token = os.environ["TG_TOKEN"]
     tg_chat_id = os.environ["TG_CHAT_ID"]
     tg_thread_id = os.environ["TG_THREAD_ID"]
-    release = get_last_build_version("crimera/twitter-apk")
+    release = get_last_build_version(repo_url)
 
     if release is None:
         raise Exception("Could not fetch release")
@@ -38,12 +39,13 @@ def report_to_telegram():
         f"[{asset.name}]({asset.browser_download_url})" for asset in release.assets
     ]
 
+    downloads_str = "\n\n".join(downloads)
     message = f"""
 [New Update Released !]({release.html_url})
 
 ▼ Downloads ▼
 
-{"\n\n".join(downloads)}
+{downloads_str}
 """
 
     print(message)
@@ -83,22 +85,21 @@ def merge_apk(path: str):
 
 def patch_apk(
     cli: str,
-    integrations: str,
     patches: str,
     apk: str,
-    includes: list[str] | None = None,
-    excludes: list[str] | None = None,
-    out: str | None = None,
+    includes: Optional[List[str]] = None,
+    excludes: Optional[List[str]] = None,
+    out: Optional[str] = None,
+    exclusive: bool = False,
+    extra_args: Optional[List[str]] = None,
 ):
     command = [
         "java",
         "-jar",
         cli,
         "patch",
-        "-b",
+        "--patches",
         patches,
-        "-m",
-        integrations,
         # use j-hc's keystore so we wouldn't need to reinstall
         "--keystore",
         "ks.keystore",
@@ -112,34 +113,48 @@ def patch_apk(
         "jhc",
     ]
 
+    if exclusive:
+        command.append("--exclusive")
+
+    if extra_args is not None:
+        command.extend(extra_args)
+
     if includes is not None:
         for i in includes:
-            command.append("-i")
+            command.append("--enable")
             command.append(i)
 
     if excludes is not None:
         for e in excludes:
-            command.append("-e")
+            command.append("--disable")
             command.append(e)
+
+    if out is not None:
+        command.append("--out")
+        command.append(out)
 
     command.append(apk)
 
+    print(f"Executing command: {' '.join(command)}")
     subprocess.run(command).check_returncode()
 
-    # remove -patched from the apk to match out
-    if out is not None:
-        cli_output = f"{str(apk).removesuffix(".apk")}-patched.apk"
-        if os.path.exists(out):
-            os.unlink(out)
-        shutil.move(cli_output, out)
 
-
-def publish_release(tag: str, files: list[str], message: str, title = ""):
+def publish_release(tag: str, files: list[str], message: str, title=""):
     key = os.environ.get("GITHUB_TOKEN")
     if key is None:
         raise Exception("GITHUB_TOKEN is not set")
 
-    command = ["gh", "release", "create", "--latest", tag, "--notes", message, "--title", title]
+    command = [
+        "gh",
+        "release",
+        "create",
+        "--latest",
+        tag,
+        "--notes",
+        message,
+        "--title",
+        title,
+    ]
 
     if len(files) == 0:
         raise Exception("Files should have atleast one item")
