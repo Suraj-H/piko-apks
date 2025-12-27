@@ -30,12 +30,15 @@ def process(latest_version: Version, config: dict):
     if download_link is None:
         raise Exception("Bundle not Found")
 
-    apkmirror.download_apk(download_link)
-    if not os.path.exists("big_file.apkm"):
+    os.makedirs("bins/temp", exist_ok=True)
+    apkm_path = "bins/temp/big_file.apkm"
+
+    apkmirror.download_apk(download_link, apkm_path)
+    if not os.path.exists(apkm_path):
         panic("Failed to download apk")
 
     if not os.path.exists("bins/big_file_merged.apk"):
-        merge_apk("big_file.apkm")
+        merge_apk(apkm_path)
     else:
         print("apkm is already merged")
 

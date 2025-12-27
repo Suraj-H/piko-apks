@@ -42,16 +42,4 @@ common_excludes = []
 
 [[variants]]
 name = "x-piko-material-you"
-
-[[variants]]
-name = "x-piko"
-excludes = ["Dynamic color"]
-
-[[variants]]
-name = "twitter-piko-material-you"
-includes = ["Bring back twitter"]
-
-[[variants]]
-name = "twitter-piko"
-includes = ["Bring back twitter"]
-excludes = ["Dynamic color"]
+extra_args = ["--mount=true", "-i", "212b2aa0"]
