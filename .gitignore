@@ -4,3 +4,4 @@ test.py
 
 # Binaries and generated files
 bins/
+.direnv
