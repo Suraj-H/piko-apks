@@ -77,9 +77,9 @@ def run_command(command: list[str]):
         exit(1)
 
 
-def merge_apk(path: str):
+def merge_apk(path: str, output: str = "bins/big_file_merged.apk"):
     subprocess.run(
-        ["java", "-jar", "./bins/apkeditor.jar", "m", "-i", path]
+        ["java", "-jar", "./bins/apkeditor.jar", "m", "-i", path, "-o", output]
     ).check_returncode()
 
 
@@ -92,6 +92,7 @@ def patch_apk(
     out: Optional[str] = None,
     exclusive: bool = False,
     extra_args: Optional[List[str]] = None,
+    temp_dir: str = "bins/temp",
 ):
     command = [
         "java",
@@ -111,6 +112,9 @@ def patch_apk(
         "jhc",
         "--keystore-entry-alias",
         "jhc",
+        # store temporary files in bins/temp
+        "--temporary-files-path",
+        temp_dir,
     ]
 
     if exclusive:

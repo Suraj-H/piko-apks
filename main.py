@@ -34,7 +34,7 @@ def process(latest_version: Version, config: dict):
     if not os.path.exists("big_file.apkm"):
         panic("Failed to download apk")
 
-    if not os.path.exists("big_file_merged.apk"):
+    if not os.path.exists("bins/big_file_merged.apk"):
         merge_apk("big_file.apkm")
     else:
         print("apkm is already merged")

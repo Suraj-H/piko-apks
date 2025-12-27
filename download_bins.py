@@ -49,7 +49,7 @@ def download_release_asset(
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    download(link, f"{out_dir.lstrip('/')}/{filename}")
+    download(link, os.path.join(out_dir, filename))
 
     return latest_release
 

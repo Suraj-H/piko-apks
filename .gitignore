@@ -1,3 +1,6 @@
 .venv
 __pycache__
 test.py
+
+# Binaries and generated files
+bins/
