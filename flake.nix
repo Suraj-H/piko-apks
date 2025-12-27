@@ -38,6 +38,7 @@
             # The Nix packages provided in the environment
             packages = with pkgs; [
               uv
+              ruff
               jdk17_headless
             ];
           };
