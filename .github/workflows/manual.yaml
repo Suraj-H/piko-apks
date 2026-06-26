@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       version_input:
-        description: 'Enter the version'
+        description: "Enter the version"
         required: true
+
+concurrency:
+  group: twitter-apk-release
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -46,7 +50,7 @@ jobs:
           mkdir -p signing
           printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
 
-      - name: Try building
+      - name: Build and publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}

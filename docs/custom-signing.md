@@ -35,27 +35,26 @@ values to `main.py`.
 
 ## 3. Supported X versions
 
-The builder patches the original APKMirror **APKM** bundle directly and includes
-[X-Shim](https://gitlab.com/inotia00/x-shim) for newer releases.
+The builder resolves supported X versions from the latest piko release at build
+time, intersects them with APKMirror, and picks the highest buildable release.
+For newer X versions it patches the original APKMirror **APKM** bundle directly
+and includes [X-Shim](https://gitlab.com/inotia00/x-shim) when required.
 
-Highest APKMirror build today:
+## 4. Automation
 
-- `12.2.0-release.0`
+The `Release` workflow runs daily at 06:00 UTC and also supports manual runs.
 
-Older fallback:
+It rebuilds and publishes when any of these change:
 
-- `12.0.0-release.0`
-- `11.81.0-release.0`
+- highest piko-supported X version on APKMirror
+- latest piko patch release
+- latest x-shim release
 
-`12.2.1` and other unreleased-by-piko versions are skipped automatically.
+Use `workflow_dispatch` with `force: true` to rebuild anyway.
 
-Manual build example:
+Manual version builds remain available in `Release - manual`.
 
-```sh
-GITHUB_REPOSITORY=your-user/twitter-apk uv run main.py --m 1 --v 12.2.0-release.0
-```
-
-## 4. Telegram notifications (optional)
+## 5. Telegram notifications (optional)
 
 If you want release announcements in Telegram, add these GitHub Secrets:
 
@@ -66,7 +65,7 @@ If you want release announcements in Telegram, add these GitHub Secrets:
 If they are missing, the build still completes and only skips the Telegram
 notification step.
 
-## 5. Install once from your fork
+## 6. Install once from your fork
 
 If your phone currently has an APK from the official `crimera/twitter-apk`
 releases, uninstall it once before installing your first fork build. After that,

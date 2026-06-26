@@ -1,7 +1,18 @@
 name: Release
 
 on:
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if x/piko/x-shim versions are unchanged"
+        type: boolean
+        default: false
+
+concurrency:
+  group: twitter-apk-release
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -16,8 +27,8 @@ jobs:
       - name: Set up java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu' # See 'Supported distributions' for available options
-          java-version: '17'
+          distribution: "zulu"
+          java-version: "17"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -42,12 +53,13 @@ jobs:
           mkdir -p signing
           printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
 
-      - name: Try building
+      - name: Build and publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == true && '1' || '' }}
           APK_KEYSTORE_PATH: signing/release.keystore
           APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
           APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}

@@ -1,10 +1,13 @@
 from apkmirror import Version, Variant
+from build_metadata import format_release_notes
 from build_variants import build_apks
 from download_bins import (
     download_apksig,
     download_morphe_cli,
     download_piko_patches,
     download_x_shim,
+    fetch_latest_x_shim_version,
+    get_latest_piko_release,
 )
 import github
 from utils import panic, publish_release, report_to_telegram
@@ -12,11 +15,18 @@ from constants import REPO
 from version_policy import (
     apkm_input_for,
     build_target,
+    fetch_piko_supported_versions,
     get_best_buildable_version,
+    needs_x_shim,
+    should_build,
 )
 import apkmirror
 import os
 import argparse
+
+
+def is_force_build() -> bool:
+    return os.environ.get("FORCE_BUILD", "").strip().lower() in ("1", "true", "yes")
 
 
 def select_bundle_variant(variants: list[Variant]) -> Variant:
@@ -37,13 +47,18 @@ def select_bundle_variant(variants: list[Variant]) -> Variant:
     return download_link
 
 
-def process(latest_version: Version):
-    target = build_target(latest_version)
+def process(
+    latest_version: Version,
+    supported_versions: tuple[str, ...],
+    piko_release: dict,
+    x_shim_version: str | None,
+):
+    target = build_target(latest_version, supported_versions)
     apkm_input = apkm_input_for(latest_version.version)
     os.makedirs("build-cache", exist_ok=True)
 
     if target.uses_x_shim:
-        print(f"Using X-Shim for {latest_version.version}")
+        print(f"Using X-Shim {x_shim_version} for {latest_version.version}")
 
     variants = apkmirror.get_variants(latest_version)
     download_link = select_bundle_variant(variants)
@@ -54,15 +69,23 @@ def process(latest_version: Version):
 
     download_morphe_cli(include_prereleases=True)
     download_apksig()
-    piko_release = download_piko_patches(include_prereleases=True)
+    download_piko_patches(
+        include_prereleases=True,
+        version=piko_release["tag_name"],
+    )
 
     if target.uses_x_shim:
-        download_x_shim()
+        if x_shim_version is None:
+            x_shim_version = download_x_shim()
+        else:
+            download_x_shim(x_shim_version)
 
-    message = f"""
-Changelogs:
-[piko-{piko_release["tag_name"]}]({piko_release["html_url"]})
-"""
+    message = format_release_notes(
+        piko_release["tag_name"],
+        piko_release["html_url"],
+        latest_version.version,
+        x_shim_version,
+    )
 
     build_apks(latest_version, list(target.patch_files), apkm_input)
 
@@ -89,32 +112,67 @@ def main():
     url = "https://www.apkmirror.com/apk/x-corp/twitter/"
     repo_url = REPO
 
+    piko_release = get_latest_piko_release(include_prereleases=True)
+    piko_ref = piko_release["tag_name"]
+    print(f"Latest piko release: {piko_ref}")
+
+    supported_versions = fetch_piko_supported_versions(piko_ref)
+    print(f"Piko-supported X versions: {', '.join(supported_versions)}")
+
     versions = apkmirror.get_versions(url)
-    latest_version = get_best_buildable_version(versions)
+    latest_version = get_best_buildable_version(versions, supported_versions)
     if latest_version is None:
         panic("Could not find a supported release version on APKMirror")
 
     if latest_version.version.find("release") < 0:
         panic("Latest supported version is not a release version")
 
-    last_build_version = github.get_last_build_version(repo_url)
-    if last_build_version is None:
-        panic("Failed to fetch the latest build version")
+    x_shim_version = (
+        fetch_latest_x_shim_version()
+        if needs_x_shim(latest_version.version)
+        else None
+    )
+    if x_shim_version:
+        print(f"Latest x-shim release: {x_shim_version}")
+
+    last_release = github.get_last_build_version(repo_url)
+    if not should_build(
+        latest_version.version,
+        piko_ref,
+        x_shim_version,
+        last_release,
+        force=is_force_build(),
+    ):
         return
 
-    if last_build_version.tag_name != latest_version.version:
-        print(f"New supported version found: {latest_version.version}")
-    else:
-        print("No new supported version found")
-        return
-
-    process(latest_version)
+    process(
+        latest_version,
+        supported_versions,
+        piko_release,
+        x_shim_version,
+    )
 
 
 def manual(version: str):
+    piko_release = get_latest_piko_release(include_prereleases=True)
+    piko_ref = piko_release["tag_name"]
+    supported_versions = fetch_piko_supported_versions(piko_ref)
+
     link = f"https://www.apkmirror.com/apk/x-corp/twitter/x-{version.replace('.', '-')}-release"
     latest_version = Version(link=link, version=version)
-    process(latest_version)
+
+    x_shim_version = (
+        fetch_latest_x_shim_version()
+        if needs_x_shim(latest_version.version)
+        else None
+    )
+
+    process(
+        latest_version,
+        supported_versions,
+        piko_release,
+        x_shim_version,
+    )
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ class Asset:
 class GithubRelease:
     tag_name: str
     html_url: str
+    body: str
     assets: list[Asset]
 
 
@@ -27,7 +28,10 @@ def _to_github_release(release) -> GithubRelease:
     ]
 
     return GithubRelease(
-        tag_name=release["tag_name"], html_url=release["html_url"], assets=assets
+        tag_name=release["tag_name"],
+        html_url=release["html_url"],
+        body=release.get("body") or "",
+        assets=assets,
     )
 
 
