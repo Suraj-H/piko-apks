@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import sys
 
@@ -8,6 +7,21 @@ from constants import REPO
 from github import get_last_build_version, get_release_by_tag
 
 _scraper = None
+
+
+def _env(name: str, default: str) -> str:
+    value = os.environ.get(name)
+    return value if value else default
+
+
+def get_signing_config() -> dict[str, str]:
+    return {
+        "keystore": _env("APK_KEYSTORE_PATH", "ks.keystore"),
+        "keystore_password": _env("APK_KEYSTORE_PASSWORD", "123456789"),
+        "key_alias": _env("APK_KEY_ALIAS", "jhc"),
+        "key_password": _env("APK_KEY_PASSWORD", _env("APK_KEYSTORE_PASSWORD", "123456789")),
+        "signer": _env("APK_SIGNER", _env("APK_KEY_ALIAS", "jhc")),
+    }
 
 def get_scraper():
     global _scraper
@@ -110,54 +124,71 @@ def merge_apk(path: str):
     ).check_returncode()
 
 
+def ensure_sign_apk() -> None:
+    if os.path.exists("scripts/SignApk.class"):
+        return
+    if not os.path.exists("bins/apksig.jar"):
+        raise FileNotFoundError("bins/apksig.jar is missing; run download_apksig() first")
+    subprocess.run(
+        ["javac", "-cp", "bins/apksig.jar", "scripts/SignApk.java"],
+        check=True,
+    )
+
+
+def sign_apk(unsigned_apk: str, signed_apk: str) -> None:
+    ensure_sign_apk()
+    signing = get_signing_config()
+    if os.path.exists(signed_apk):
+        os.unlink(signed_apk)
+    subprocess.run(
+        [
+            "java",
+            "-cp",
+            "bins/apksig.jar:scripts",
+            "SignApk",
+            unsigned_apk,
+            signed_apk,
+            signing["keystore"],
+            signing["keystore_password"],
+            signing["key_alias"],
+            signing["key_password"],
+        ],
+        check=True,
+    )
+
+
 def patch_apk(
     cli: str,
-    patches: str,
+    patch_files: list[str],
     apk: str,
     includes: list[str] | None = None,
     excludes: list[str] | None = None,
     out: str | None = None,
 ):
-    command = [
-        "java",
-        "-jar",
-        cli,
-        "patch",
-        "-p",
-        patches,
-        # use j-hc's keystore so we wouldn't need to reinstall
-        "--keystore",
-        "ks.keystore",
-        "--keystore-entry-password",
-        "123456789",
-        "--keystore-password",
-        "123456789",
-        "--signer",
-        "jhc",
-        "--keystore-entry-alias",
-        "jhc",
-    ]
+    if out is None:
+        raise ValueError("patch_apk requires an explicit output path")
+
+    unsigned_apk = out.removesuffix(".apk") + "-unsigned.apk"
+    for path in (unsigned_apk, out):
+        if os.path.exists(path):
+            os.unlink(path)
+
+    command = ["java", "-jar", cli, "patch", "--unsigned", "-o", unsigned_apk]
+    for patch_file in patch_files:
+        command.extend(["-p", patch_file])
 
     if includes is not None:
-        for i in includes:
-            command.append("-e")
-            command.append(i)
+        for include in includes:
+            command.extend(["-e", include])
 
     if excludes is not None:
-        for e in excludes:
-            command.append("-d")
-            command.append(e)
+        for exclude in excludes:
+            command.extend(["-d", exclude])
 
     command.append(apk)
-
-    subprocess.run(command).check_returncode()
-
-    # remove -patched from the apk to match out
-    if out is not None:
-        cli_output = f"{str(apk).removesuffix(".apk")}-patched.apk"
-        if os.path.exists(out):
-            os.unlink(out)
-        shutil.move(cli_output, out)
+    subprocess.run(command, check=True)
+    sign_apk(unsigned_apk, out)
+    os.unlink(unsigned_apk)
 
 
 def publish_release(tag: str, files: list[str], message: str, title = ""):
