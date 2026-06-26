@@ -200,17 +200,50 @@ def patch_apk(
     os.unlink(unsigned_apk)
 
 
-def publish_release(tag: str, files: list[str], message: str, title = ""):
-    key = os.environ.get("GITHUB_TOKEN")
-    if key is None:
+def publish_release(tag: str, files: list[str], message: str, title=""):
+    if os.environ.get("GITHUB_TOKEN") is None:
         raise Exception("GITHUB_TOKEN is not set")
-
-    command = ["gh", "release", "create", "--latest", tag, "--notes", message, "--title", title]
 
     if len(files) == 0:
         raise Exception("Files should have atleast one item")
 
-    for file in files:
-        command.append(file)
+    env = os.environ.copy()
+    existing = get_release_by_tag(REPO, tag)
 
-    subprocess.run(command, env=os.environ.copy()).check_returncode()
+    if existing is None:
+        command = [
+            "gh",
+            "release",
+            "create",
+            "--latest",
+            tag,
+            "--notes",
+            message,
+            "--title",
+            title,
+            *files,
+        ]
+        subprocess.run(command, env=env, check=True)
+        return
+
+    print(f"Release {tag} already exists, uploading assets")
+    subprocess.run(
+        ["gh", "release", "upload", tag, *files, "--clobber"],
+        env=env,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "gh",
+            "release",
+            "edit",
+            tag,
+            "--latest",
+            "--notes",
+            message,
+            "--title",
+            title,
+        ],
+        env=env,
+        check=True,
+    )
