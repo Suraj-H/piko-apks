@@ -39,25 +39,34 @@ def panic(message: str):
     exit(1)
 
 
-def send_message(message: str, token: str, chat_id: str, thread_id: str):
+def send_message(message: str, token: str, chat_id: str, thread_id: str | None = None):
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
 
     data = {
         "parse_mode": "Markdown",
         "disable_web_page_preview": "true",
         "text": message,
-        "message_thread_id": thread_id,
         "chat_id": chat_id,
     }
+    if thread_id:
+        data["message_thread_id"] = thread_id
 
     response = requests.post(endpoint, data=data)
     response.raise_for_status()
 
 
+def telegram_is_configured() -> bool:
+    return bool(os.environ.get("TG_TOKEN") and os.environ.get("TG_CHAT_ID"))
+
+
 def report_to_telegram(tag: str | None = None):
+    if not telegram_is_configured():
+        print("Telegram secrets not configured, skipping notification")
+        return
+
     tg_token = os.environ["TG_TOKEN"]
     tg_chat_id = os.environ["TG_CHAT_ID"]
-    tg_thread_id = os.environ["TG_THREAD_ID"]
+    tg_thread_id = os.environ.get("TG_THREAD_ID")
 
     release = get_release_by_tag(REPO, tag) if tag else get_last_build_version(REPO)
 

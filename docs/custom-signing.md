@@ -55,7 +55,18 @@ Manual build example:
 GITHUB_REPOSITORY=your-user/twitter-apk uv run main.py --m 1 --v 12.2.0-release.0
 ```
 
-## 4. Install once from your fork
+## 4. Telegram notifications (optional)
+
+If you want release announcements in Telegram, add these GitHub Secrets:
+
+- `TG_TOKEN`
+- `TG_CHAT_ID`
+- `TG_THREAD_ID` (optional for non-topic chats)
+
+If they are missing, the build still completes and only skips the Telegram
+notification step.
+
+## 5. Install once from your fork
 
 If your phone currently has an APK from the official `crimera/twitter-apk`
 releases, uninstall it once before installing your first fork build. After that,
