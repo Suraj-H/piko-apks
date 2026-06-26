@@ -1,62 +1,74 @@
 from apkmirror import Version, Variant
 from build_variants import build_apks
-from download_bins import download_apkeditor, download_morphe_cli, download_release_asset
+from download_bins import (
+    download_apksig,
+    download_morphe_cli,
+    download_piko_patches,
+    download_x_shim,
+)
 import github
-from utils import panic, merge_apk, publish_release, report_to_telegram
+from utils import panic, publish_release, report_to_telegram
 from constants import REPO
+from version_policy import (
+    apkm_input_for,
+    build_target,
+    get_best_buildable_version,
+)
 import apkmirror
 import os
 import argparse
 
 
-def get_latest_release(versions: list[Version]) -> Version | None:
-    for i in versions:
-        if i.version.find("release") >= 0:
-            return i
+def select_bundle_variant(variants: list[Variant]) -> Variant:
+    for variant in variants:
+        if variant.is_bundle and variant.architecture == "universal":
+            return variant
+
+    bundle_variants = [variant for variant in variants if variant.is_bundle]
+    if not bundle_variants:
+        raise Exception("Bundle not Found")
+
+    fallback = next(
+        (variant for variant in bundle_variants if variant.architecture == "arm64-v8a"),
+        None,
+    )
+    download_link = fallback or bundle_variants[0]
+    print(f"Universal bundle not found, falling back to {download_link.architecture}")
+    return download_link
 
 
 def process(latest_version: Version):
-    variants: list[Variant] = apkmirror.get_variants(latest_version)
+    target = build_target(latest_version)
+    apkm_input = apkm_input_for(latest_version.version)
+    os.makedirs("build-cache", exist_ok=True)
 
-    download_link: Variant | None = None
-    for variant in variants:
-        if variant.is_bundle and variant.architecture == "universal":
-            download_link = variant
-            break
+    if target.uses_x_shim:
+        print(f"Using X-Shim for {latest_version.version}")
 
-    if download_link is None:
-        bundle_variants = [v for v in variants if v.is_bundle]
-        if not bundle_variants:
-            raise Exception("Bundle not Found")
+    variants = apkmirror.get_variants(latest_version)
+    download_link = select_bundle_variant(variants)
 
-        fallback = next((v for v in bundle_variants if v.architecture == "arm64-v8a"), None)
-        download_link = fallback or bundle_variants[0]
-        print(f"Universal bundle not found, falling back to {download_link.architecture}")
-
-    apkmirror.download_apk(download_link)
-    if not os.path.exists("big_file.apkm"):
-        panic("Failed to download apk")
-
-    download_apkeditor()
-
-    if not os.path.exists("big_file_merged.apk"):
-        merge_apk("big_file.apkm")
-    else:
-        print("apkm is already merged")
+    apkmirror.download_apk(download_link, apkm_input)
+    if not os.path.exists(apkm_input):
+        panic(f"Failed to download apk bundle: {apkm_input}")
 
     download_morphe_cli(include_prereleases=True)
+    download_apksig()
+    piko_release = download_piko_patches(include_prereleases=True)
 
-    print("Downloading patches")
-    pikoRelease = download_release_asset(
-        "crimera/piko", "^patches.*mpp$", "bins", "patches.mpp", include_prereleases=True
-    )
+    if target.uses_x_shim:
+        download_x_shim()
 
-    message: str = f"""
+    message = f"""
 Changelogs:
-[piko-{pikoRelease["tag_name"]}]({pikoRelease["html_url"]})
+[piko-{piko_release["tag_name"]}]({piko_release["html_url"]})
 """
 
-    build_apks(latest_version)
+    build_apks(latest_version, list(target.patch_files), apkm_input)
+
+    if os.environ.get("SKIP_PUBLISH") == "1":
+        print("SKIP_PUBLISH=1, skipping GitHub release and Telegram notification")
+        return
 
     publish_release(
         latest_version.version,
@@ -67,63 +79,55 @@ Changelogs:
             f"twitter-piko-material-you-v{latest_version.version}.apk",
         ],
         message,
-        latest_version.version
+        latest_version.version,
     )
 
     report_to_telegram(tag=latest_version.version)
 
 
 def main():
-    # get latest version
-    url: str = "https://www.apkmirror.com/apk/x-corp/twitter/"
-    repo_url: str = REPO
+    url = "https://www.apkmirror.com/apk/x-corp/twitter/"
+    repo_url = REPO
 
     versions = apkmirror.get_versions(url)
-
-    latest_version = get_latest_release(versions)
+    latest_version = get_best_buildable_version(versions)
     if latest_version is None:
-        raise Exception("Could not find the latest version")
+        panic("Could not find a supported release version on APKMirror")
 
-    # only continue if it's a release
     if latest_version.version.find("release") < 0:
-        panic("Latest version is not a release version")
+        panic("Latest supported version is not a release version")
 
-    last_build_version: github.GithubRelease | None = github.get_last_build_version(
-        repo_url
-    )
-
+    last_build_version = github.get_last_build_version(repo_url)
     if last_build_version is None:
         panic("Failed to fetch the latest build version")
         return
 
-    # Begin stuff
     if last_build_version.tag_name != latest_version.version:
-        print(f"New version found: {latest_version.version}")
+        print(f"New supported version found: {latest_version.version}")
     else:
-        print("No new version found")
+        print("No new supported version found")
         return
 
     process(latest_version)
 
 
-def manual(version:str):
-    link = f'https://www.apkmirror.com/apk/x-corp/twitter/x-{version.replace(".","-")}-release'
-    latest_version = Version(link=link,version=version)
+def manual(version: str):
+    link = f"https://www.apkmirror.com/apk/x-corp/twitter/x-{version.replace('.', '-')}-release"
+    latest_version = Version(link=link, version=version)
     process(latest_version)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Piko APK')
-    # 0 = auto; 1 = manual;
-    parser.add_argument('--m', action="store", dest='mode', default=0)
-    parser.add_argument('--v', action="store", dest='version', default=0)
+    parser = argparse.ArgumentParser(description="Piko APK")
+    parser.add_argument("--m", action="store", dest="mode", default=0)
+    parser.add_argument("--v", action="store", dest="version", default=0)
 
     args = parser.parse_args()
     mode = args.mode
 
-    if not mode: # auto
+    if not mode:
         main()
-    else: # manual
+    else:
         version = args.version
         if not version:
             raise Exception("Version is required.")

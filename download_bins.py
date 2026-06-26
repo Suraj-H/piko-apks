@@ -1,8 +1,12 @@
+import os
 import re
 
 import requests
 
 from utils import download
+
+X_SHIM_VERSION = os.environ.get("X_SHIM_VERSION", "1.6.3")
+APKSIG_VERSION = os.environ.get("APKSIG_VERSION", "8.7.3")
 
 
 def download_release_asset(
@@ -49,11 +53,6 @@ def download_release_asset(
     return latest_release
 
 
-def download_apkeditor():
-    print("Downloading apkeditor")
-    download_release_asset("REAndroid/APKEditor", "APKEditor", "bins", "apkeditor.jar")
-
-
 def download_morphe_cli(include_prereleases: bool = False):
     print("Downloading morphe cli")
     download_release_asset(
@@ -63,3 +62,29 @@ def download_morphe_cli(include_prereleases: bool = False):
         "morphe-cli.jar",
         include_prereleases=include_prereleases,
     )
+
+
+def download_piko_patches(include_prereleases: bool = True):
+    print("Downloading piko patches")
+    return download_release_asset(
+        "crimera/piko",
+        r"^patches.*\.mpp$",
+        "bins",
+        "patches.mpp",
+        include_prereleases=include_prereleases,
+    )
+
+
+def download_x_shim(version: str = X_SHIM_VERSION):
+    print(f"Downloading x-shim v{version}")
+    url = (
+        f"https://gitlab.com/inotia00/x-shim/-/releases/v{version}/downloads/"
+        f"patches-{version}.mpp"
+    )
+    download(url, "bins/x-shim.mpp")
+
+
+def download_apksig(version: str = APKSIG_VERSION):
+    print(f"Downloading apksig v{version}")
+    url = f"https://dl.google.com/android/maven2/com/android/tools/build/apksig/{version}/apksig-{version}.jar"
+    download(url, "bins/apksig.jar")

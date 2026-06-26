@@ -2,3 +2,10 @@
 __pycache__
 test.py
 .direnv
+signing/
+bins/
+build-cache/
+scripts/*.class
+*.keystore.b64
+*.apk
+*.apkm

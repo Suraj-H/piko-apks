@@ -32,12 +32,30 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Restore signing keystore
+        env:
+          APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          : "${APK_KEYSTORE_BASE64:?Missing APK_KEYSTORE_BASE64 secret}"
+          : "${APK_KEYSTORE_PASSWORD:?Missing APK_KEYSTORE_PASSWORD secret}"
+          : "${APK_KEY_ALIAS:?Missing APK_KEY_ALIAS secret}"
+          : "${APK_KEY_PASSWORD:?Missing APK_KEY_PASSWORD secret}"
+          mkdir -p signing
+          printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
+
       - name: Try building
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          APK_KEYSTORE_PATH: signing/release.keystore
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           mkdir -p bins
           uv run main.py --m 1 --v ${{ github.event.inputs.version_input }}
