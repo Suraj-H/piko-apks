@@ -200,7 +200,14 @@ def patch_apk(
     os.unlink(unsigned_apk)
 
 
-def publish_release(tag: str, files: list[str], message: str, title=""):
+def publish_release(
+    tag: str,
+    files: list[str],
+    message: str,
+    title="",
+    *,
+    mark_latest: bool = True,
+):
     if os.environ.get("GITHUB_TOKEN") is None:
         raise Exception("GITHUB_TOKEN is not set")
 
@@ -209,13 +216,14 @@ def publish_release(tag: str, files: list[str], message: str, title=""):
 
     env = os.environ.copy()
     existing = get_release_by_tag(REPO, tag)
+    latest_args = ["--latest"] if mark_latest else []
 
     if existing is None:
         command = [
             "gh",
             "release",
             "create",
-            "--latest",
+            *latest_args,
             tag,
             "--notes",
             message,
@@ -232,18 +240,15 @@ def publish_release(tag: str, files: list[str], message: str, title=""):
         env=env,
         check=True,
     )
-    subprocess.run(
-        [
-            "gh",
-            "release",
-            "edit",
-            tag,
-            "--latest",
-            "--notes",
-            message,
-            "--title",
-            title,
-        ],
-        env=env,
-        check=True,
-    )
+    edit_command = [
+        "gh",
+        "release",
+        "edit",
+        tag,
+        *latest_args,
+        "--notes",
+        message,
+        "--title",
+        title,
+    ]
+    subprocess.run(edit_command, env=env, check=True)

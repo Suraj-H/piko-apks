@@ -3,13 +3,20 @@ name: Release - manual
 on:
   workflow_dispatch:
     inputs:
-      version_input:
-        description: "Enter the version"
+      app:
+        description: "App to build"
+        type: choice
+        options:
+          - x
+          - instagram
         required: true
-
-concurrency:
-  group: twitter-apk-release
-  cancel-in-progress: true
+      version_input:
+        description: "App version (e.g. 12.2.0-release.0 or 435.0.0.37.76)"
+        required: true
+      force:
+        description: "Rebuild even if versions are unchanged"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -18,14 +25,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    concurrency:
+      group: piko-release-${{ github.event.inputs.app }}
+      cancel-in-progress: true
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu' # See 'Supported distributions' for available options
-          java-version: '17'
+          distribution: "zulu"
+          java-version: "17"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -56,10 +67,11 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          FORCE_BUILD: ${{ github.event.inputs.force && '1' || '' }}
           APK_KEYSTORE_PATH: signing/release.keystore
           APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
           APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
           APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           mkdir -p bins
-          uv run main.py --m 1 --v ${{ github.event.inputs.version_input }}
+          uv run main.py --app ${{ github.event.inputs.app }} --m 1 --v ${{ github.event.inputs.version_input }}

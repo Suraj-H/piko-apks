@@ -1,7 +1,6 @@
 from apkmirror import Version
+from apps.shared import MORPHE_CLI
 from utils import patch_apk
-
-MORPHE_CLI = "bins/morphe-cli.jar"
 
 COMMON_INCLUDES = [
     "Enable app downgrading",
@@ -19,16 +18,22 @@ COMMON_INCLUDES = [
 ]
 
 
-def build_apks(latest_version: Version, patch_files: list[str], apkm: str):
-    common_excludes: list[str] = []
+def build_apks(latest_version: Version, patch_files: list[str], apkm: str) -> list[str]:
+    version = latest_version.version
+    outputs = [
+        f"x-piko-material-you-v{version}.apk",
+        f"x-piko-v{version}.apk",
+        f"twitter-piko-material-you-v{version}.apk",
+        f"twitter-piko-v{version}.apk",
+    ]
 
     patch_apk(
         MORPHE_CLI,
         patch_files,
         apkm,
         includes=["Dynamic color", *COMMON_INCLUDES],
-        excludes=common_excludes,
-        out=f"x-piko-material-you-v{latest_version.version}.apk",
+        excludes=[],
+        out=outputs[0],
     )
 
     patch_apk(
@@ -36,8 +41,8 @@ def build_apks(latest_version: Version, patch_files: list[str], apkm: str):
         patch_files,
         apkm,
         includes=COMMON_INCLUDES,
-        excludes=["Dynamic color", *common_excludes],
-        out=f"x-piko-v{latest_version.version}.apk",
+        excludes=["Dynamic color"],
+        out=outputs[1],
     )
 
     patch_apk(
@@ -45,8 +50,8 @@ def build_apks(latest_version: Version, patch_files: list[str], apkm: str):
         patch_files,
         apkm,
         includes=["Bring back twitter", "Dynamic color", *COMMON_INCLUDES],
-        excludes=common_excludes,
-        out=f"twitter-piko-material-you-v{latest_version.version}.apk",
+        excludes=[],
+        out=outputs[2],
     )
 
     patch_apk(
@@ -54,6 +59,8 @@ def build_apks(latest_version: Version, patch_files: list[str], apkm: str):
         patch_files,
         apkm,
         includes=["Bring back twitter", *COMMON_INCLUDES],
-        excludes=["Dynamic color", *common_excludes],
-        out=f"twitter-piko-v{latest_version.version}.apk",
+        excludes=["Dynamic color"],
+        out=outputs[3],
     )
+
+    return outputs

@@ -1,142 +1,36 @@
-from apkmirror import Version, Variant
-from build_metadata import format_release_notes
-from build_variants import build_apks
-from download_bins import (
-    download_apksig,
-    download_morphe_cli,
-    download_piko_patches,
-    download_x_shim,
-    fetch_latest_x_shim_version,
-    get_latest_piko_release,
-)
-import github
-from utils import panic, publish_release, report_to_telegram
-from constants import REPO
-from version_policy import (
-    apkm_input_for,
-    build_target,
-    fetch_piko_supported_versions,
-    get_best_buildable_version,
-    needs_x_shim,
-    should_build,
-)
-import apkmirror
-import os
 import argparse
+import os
+
+from apps.registry import APP_IDS, get_app, should_build
+from constants import REPO
+from download_bins import get_latest_piko_release
+import github
+from utils import panic
 
 
 def is_force_build() -> bool:
     return os.environ.get("FORCE_BUILD", "").strip().lower() in ("1", "true", "yes")
 
 
-def select_bundle_variant(variants: list[Variant]) -> Variant:
-    for variant in variants:
-        if variant.is_bundle and variant.architecture == "universal":
-            return variant
-
-    bundle_variants = [variant for variant in variants if variant.is_bundle]
-    if not bundle_variants:
-        raise Exception("Bundle not Found")
-
-    fallback = next(
-        (variant for variant in bundle_variants if variant.architecture == "arm64-v8a"),
-        None,
-    )
-    download_link = fallback or bundle_variants[0]
-    print(f"Universal bundle not found, falling back to {download_link.architecture}")
-    return download_link
-
-
-def process(
-    latest_version: Version,
-    supported_versions: tuple[str, ...],
-    piko_release: dict,
-    x_shim_version: str | None,
-):
-    target = build_target(latest_version, supported_versions)
-    apkm_input = apkm_input_for(latest_version.version)
-    os.makedirs("build-cache", exist_ok=True)
-
-    if target.uses_x_shim:
-        print(f"Using X-Shim {x_shim_version} for {latest_version.version}")
-
-    variants = apkmirror.get_variants(latest_version)
-    download_link = select_bundle_variant(variants)
-
-    apkmirror.download_apk(download_link, apkm_input)
-    if not os.path.exists(apkm_input):
-        panic(f"Failed to download apk bundle: {apkm_input}")
-
-    download_morphe_cli(include_prereleases=True)
-    download_apksig()
-    download_piko_patches(
-        include_prereleases=True,
-        version=piko_release["tag_name"],
-    )
-
-    if target.uses_x_shim:
-        if x_shim_version is None:
-            x_shim_version = download_x_shim()
-        else:
-            download_x_shim(x_shim_version)
-
-    message = format_release_notes(
-        piko_release["tag_name"],
-        piko_release["html_url"],
-        latest_version.version,
-        x_shim_version,
-    )
-
-    build_apks(latest_version, list(target.patch_files), apkm_input)
-
-    if os.environ.get("SKIP_PUBLISH") == "1":
-        print("SKIP_PUBLISH=1, skipping GitHub release and Telegram notification")
-        return
-
-    publish_release(
-        latest_version.version,
-        [
-            f"x-piko-v{latest_version.version}.apk",
-            f"x-piko-material-you-v{latest_version.version}.apk",
-            f"twitter-piko-v{latest_version.version}.apk",
-            f"twitter-piko-material-you-v{latest_version.version}.apk",
-        ],
-        message,
-        latest_version.version,
-    )
-
-    report_to_telegram(tag=latest_version.version)
-
-
-def main():
-    url = "https://www.apkmirror.com/apk/x-corp/twitter/"
-    repo_url = REPO
-
+def build_app(app_id: str, *, manual_version: str | None = None) -> None:
+    app = get_app(app_id)
     piko_release = get_latest_piko_release(include_prereleases=True)
     piko_ref = piko_release["tag_name"]
-    print(f"Latest piko release: {piko_ref}")
+    print(f"[{app_id}] Latest piko release: {piko_ref}")
 
-    supported_versions = fetch_piko_supported_versions(piko_ref)
-    print(f"Piko-supported X versions: {', '.join(supported_versions)}")
+    supported_versions = app.fetch_supported_versions(piko_ref)
+    print(f"[{app_id}] Piko-supported versions: {', '.join(supported_versions)}")
 
-    versions = apkmirror.get_versions(url)
-    latest_version = get_best_buildable_version(versions, supported_versions)
-    if latest_version is None:
-        panic("Could not find a supported release version on APKMirror")
+    latest_version = app.resolve_version(supported_versions, manual_version)
+    print(f"[{app_id}] Selected version: {latest_version.version}")
 
-    if latest_version.version.find("release") < 0:
-        panic("Latest supported version is not a release version")
-
-    x_shim_version = (
-        fetch_latest_x_shim_version()
-        if needs_x_shim(latest_version.version)
-        else None
-    )
+    x_shim_version = app.resolve_extra_version(latest_version.version)
     if x_shim_version:
-        print(f"Latest x-shim release: {x_shim_version}")
+        print(f"[{app_id}] Latest x-shim release: {x_shim_version}")
 
-    last_release = github.get_last_build_version(repo_url)
+    last_release = github.get_last_release_for_app(REPO, app_id)
     if not should_build(
+        app_id,
         latest_version.version,
         piko_ref,
         x_shim_version,
@@ -145,48 +39,42 @@ def main():
     ):
         return
 
-    process(
-        latest_version,
-        supported_versions,
-        piko_release,
-        x_shim_version,
-    )
+    app.process(latest_version, supported_versions, piko_release)
 
 
-def manual(version: str):
-    piko_release = get_latest_piko_release(include_prereleases=True)
-    piko_ref = piko_release["tag_name"]
-    supported_versions = fetch_piko_supported_versions(piko_ref)
+def run_apps(app_ids: tuple[str, ...], *, manual_version: str | None = None) -> None:
+    for app_id in app_ids:
+        build_app(app_id, manual_version=manual_version)
 
-    link = f"https://www.apkmirror.com/apk/x-corp/twitter/x-{version.replace('.', '-')}-release"
-    latest_version = Version(link=link, version=version)
 
-    x_shim_version = (
-        fetch_latest_x_shim_version()
-        if needs_x_shim(latest_version.version)
-        else None
-    )
+def parse_app_ids(raw: str, *, manual: bool) -> tuple[str, ...]:
+    if raw == "all":
+        if manual:
+            panic("Manual builds require a single app. Use --app x or --app instagram.")
+        return APP_IDS
 
-    process(
-        latest_version,
-        supported_versions,
-        piko_release,
-        x_shim_version,
-    )
+    if raw not in APP_IDS:
+        panic(f"Unknown app {raw!r}. Expected one of: {', '.join([*APP_IDS, 'all'])}")
+
+    return (raw,)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Piko APK")
+    parser = argparse.ArgumentParser(description="Piko APK builder")
+    parser.add_argument(
+        "--app",
+        choices=[*APP_IDS, "all"],
+        default="all",
+        help="App to build (default: all)",
+    )
     parser.add_argument("--m", action="store", dest="mode", default=0)
-    parser.add_argument("--v", action="store", dest="version", default=0)
+    parser.add_argument("--v", action="store", dest="version", default="")
 
     args = parser.parse_args()
-    mode = args.mode
+    manual = bool(args.mode)
+    app_ids = parse_app_ids(args.app, manual=manual)
 
-    if not mode:
-        main()
-    else:
-        version = args.version
-        if not version:
-            raise Exception("Version is required.")
-        manual(version)
+    if manual and not args.version:
+        panic("Version is required for manual builds.")
+
+    run_apps(app_ids, manual_version=args.version or None)

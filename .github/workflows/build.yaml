@@ -6,13 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: "Rebuild even if x/piko/x-shim versions are unchanged"
+        description: "Rebuild even if app/piko/x-shim versions are unchanged"
         type: boolean
         default: false
-
-concurrency:
-  group: twitter-apk-release
-  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -20,6 +16,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [x, instagram]
+      fail-fast: false
+
+    concurrency:
+      group: piko-release-${{ matrix.app }}
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v4
@@ -66,4 +70,4 @@ jobs:
           APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           mkdir -p bins
-          uv run main.py
+          uv run main.py --app ${{ matrix.app }}

@@ -33,26 +33,43 @@ In your fork, open `Settings` -> `Secrets and variables` -> `Actions`, then add:
 The workflows restore the keystore from those secrets and pass the signing
 values to `main.py`.
 
-## 3. Supported X versions
+## 3. Supported apps and versions
 
-The builder resolves supported X versions from the latest piko release at build
+The builder resolves supported versions from the latest piko release at build
 time, intersects them with APKMirror, and picks the highest buildable release.
-For newer X versions it patches the original APKMirror **APKM** bundle directly
-and includes [X-Shim](https://gitlab.com/inotia00/x-shim) when required.
+
+### X/Twitter
+
+- Patches the original APKMirror **APKM** bundle directly
+- Includes [X-Shim](https://gitlab.com/inotia00/x-shim) when required (11.88+)
+- Release tag: `{version}` (example: `12.2.0-release.0`)
+- Outputs: `x-piko-*`, `twitter-piko-*` (standard + Material You variants)
+
+### Instagram
+
+- Patches the original APKMirror **APKM** bundle directly (arm64-v8a)
+- No X-Shim required
+- Release tag: `ig-{version}` (example: `ig-435.0.0.37.76`)
+- Outputs:
+  - `instagram-piko-v{version}-arm64-v8a.apk`
+  - `instagram-piko-amoled-v{version}-arm64-v8a.apk`
 
 ## 4. Automation
 
-The `Release` workflow runs daily at 06:00 UTC and also supports manual runs.
+The `Release` workflow runs daily at 06:00 UTC with a matrix job for `x` and
+`instagram`. Each app rebuilds independently when its own version metadata
+changes.
 
-It rebuilds and publishes when any of these change:
+Rebuild triggers per app:
 
-- highest piko-supported X version on APKMirror
+- highest piko-supported app version on APKMirror
 - latest piko patch release
-- latest x-shim release
+- latest x-shim release (X only)
 
 Use `workflow_dispatch` with `force: true` to rebuild anyway.
 
-Manual version builds remain available in `Release - manual`.
+Manual version builds are available in `Release - manual` with `app` and
+`version` inputs.
 
 ## 5. Telegram notifications (optional)
 
@@ -71,3 +88,7 @@ If your phone currently has an APK from the official `crimera/twitter-apk`
 releases, uninstall it once before installing your first fork build. After that,
 future APKs from this fork should install as updates as long as these secrets do
 not change.
+
+Rename the GitHub repo to `piko-apks` when ready — no code changes required
+beyond updating local remotes; `GITHUB_REPOSITORY` is injected automatically in
+Actions.
