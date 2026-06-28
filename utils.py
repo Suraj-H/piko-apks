@@ -108,13 +108,15 @@ def download(link, out, headers=None, use_scraper=False):
 
     session = get_http_client() if use_scraper else requests
 
-    # https://www.slingacademy.com/article/python-requests-module-how-to-download-files-from-urls/#Streaming_Large_Files
-    with session.get(link, stream=True, headers=headers) as r:
-        r.raise_for_status()
+    response = session.get(link, stream=True, headers=headers, timeout=(30, 600))
+    try:
+        response.raise_for_status()
         with open(out, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
+    finally:
+        response.close()
 
 
 def run_command(command: list[str]):
