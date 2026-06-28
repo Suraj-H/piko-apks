@@ -58,15 +58,19 @@ time, intersects them with APKMirror, and picks the highest buildable release.
 
 ## 4. Automation
 
-The `Release` workflow runs daily at 06:00 UTC with a matrix job for `x` and
-`instagram`. Each app rebuilds independently when its own version metadata
-changes.
+The `Release` workflow runs weekly on Monday at 06:00 UTC.
+
+1. A lightweight **plan** job resolves the current X/Instagram target versions and
+   compares them to each app's last release metadata.
+2. Build jobs start **only** for apps that need a new release.
 
 Rebuild triggers per app:
 
-- highest piko-supported app version on APKMirror
-- latest piko patch release
-- latest x-shim release (X only)
+- resolved app version changed (new target on APKMirror/Uptodown or new piko-supported version)
+- latest x-shim release changed (X only)
+
+A piko release alone does **not** rebuild an app unless that app's resolved target
+version also changed. Release notes still record the piko version used for the build.
 
 Use `workflow_dispatch` with `force: true` to rebuild anyway.
 

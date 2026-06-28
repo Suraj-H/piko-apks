@@ -2,11 +2,11 @@ name: Release
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       force:
-        description: "Rebuild even if app/piko/x-shim versions are unchanged"
+        description: "Rebuild even if app/x-shim versions are unchanged"
         type: boolean
         default: false
 
@@ -14,17 +14,43 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  plan:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        app: [x, instagram]
-      fail-fast: false
+    outputs:
+      build_x: ${{ steps.plan.outputs.build_x }}
+      build_instagram: ${{ steps.plan.outputs.build_instagram }}
+      any_build: ${{ steps.plan.outputs.any_build }}
+    steps:
+      - uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Evaluate build plan
+        id: plan
+        env:
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '' }}
+        run: |
+          set -euo pipefail
+          plan_json="$(uv run main.py --plan)"
+          echo "$plan_json"
+          echo "build_x=$(echo "$plan_json" | jq -r '.apps.x.build')" >> "$GITHUB_OUTPUT"
+          echo "build_instagram=$(echo "$plan_json" | jq -r '.apps.instagram.build')" >> "$GITHUB_OUTPUT"
+          echo "any_build=$(echo "$plan_json" | jq -r '.any_build')" >> "$GITHUB_OUTPUT"
+
+  build-x:
+    needs: plan
+    if: needs.plan.outputs.build_x == 'true'
+    runs-on: ubuntu-latest
     concurrency:
-      group: piko-release-${{ matrix.app }}
+      group: piko-release-x
       cancel-in-progress: true
-
     steps:
       - uses: actions/checkout@v4
 
@@ -70,4 +96,58 @@ jobs:
           APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           mkdir -p bins
-          uv run main.py --app ${{ matrix.app }}
+          uv run main.py --app x
+
+  build-instagram:
+    needs: plan
+    if: needs.plan.outputs.build_instagram == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: piko-release-instagram
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Restore signing keystore
+        env:
+          APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          : "${APK_KEYSTORE_BASE64:?Missing APK_KEYSTORE_BASE64 secret}"
+          : "${APK_KEYSTORE_PASSWORD:?Missing APK_KEYSTORE_PASSWORD secret}"
+          : "${APK_KEY_ALIAS:?Missing APK_KEY_ALIAS secret}"
+          : "${APK_KEY_PASSWORD:?Missing APK_KEY_PASSWORD secret}"
+          mkdir -p signing
+          printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
+
+      - name: Build and publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '' }}
+          APK_KEYSTORE_PATH: signing/release.keystore
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          mkdir -p bins
+          uv run main.py --app instagram

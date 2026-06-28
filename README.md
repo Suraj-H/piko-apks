@@ -17,7 +17,8 @@ Each app publishes to its own release tag with independent rebuild logic.
 
 ```sh
 uv sync
-uv run main.py --app all          # build X + Instagram if versions changed
+uv run main.py --plan              # JSON build plan, no APK build
+uv run main.py --app all           # build only apps that need releases
 uv run main.py --app x            # X only
 uv run main.py --app instagram    # Instagram only
 SKIP_PUBLISH=1 uv run main.py --app instagram
