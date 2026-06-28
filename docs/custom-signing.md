@@ -47,7 +47,9 @@ time, intersects them with APKMirror, and picks the highest buildable release.
 
 ### Instagram
 
-- Patches the original APKMirror **APKM** bundle directly (arm64-v8a)
+- Downloads the original bundle from [Uptodown](https://instagram.en.uptodown.com/android)
+  because APKMirror serves Instagram behind Cloudflare blocks in CI
+- Patches the bundle directly with Morphe (same as X)
 - No X-Shim required
 - Release tag: `ig-{version}` (example: `ig-435.0.0.37.76`)
 - Outputs:

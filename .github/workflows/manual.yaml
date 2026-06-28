@@ -67,7 +67,7 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
-          FORCE_BUILD: ${{ github.event.inputs.force && '1' || '' }}
+          FORCE_BUILD: ${{ github.event.inputs.force == 'true' && '1' || '' }}
           APK_KEYSTORE_PATH: signing/release.keystore
           APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
           APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}

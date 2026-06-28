@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from typing import cast
+
 from bs4 import BeautifulSoup, Tag
-from utils import download, get_scraper
+from http_client import http_get
+from utils import download
 
 
 @dataclass
@@ -39,7 +41,7 @@ class FailedToFetch(Exception):
 
 def get_versions(url: str) -> list[Version]:
     """Get the latest version of the app from the given apkmirror url"""
-    response = get_scraper().get(url)
+    response = http_get(url)
     if response.status_code != 200:
         raise FailedToFetch(f"{url}: {response.status_code}")
 
@@ -68,8 +70,7 @@ def download_apk(variant: Variant, path: str = "big_file.apkm"):
     """Download apk from the variant link"""
     url = variant.link
 
-    response = get_scraper().get(url)
-
+    response = http_get(url)
     if response.status_code != 200:
         raise FailedToFetch(url)
 
@@ -83,8 +84,8 @@ def download_apk(variant: Variant, path: str = "big_file.apkm"):
         f"https://www.apkmirror.com/{cast(Tag, downloadButton).attrs['href']}"
     )
 
-    download_page = get_scraper().get(download_page_link)
-    if response.status_code != 200:
+    download_page = http_get(download_page_link)
+    if download_page.status_code != 200:
         raise FailedToFetch(download_page_link)
 
     download_page_body = BeautifulSoup(download_page.content, "html.parser")
@@ -107,9 +108,9 @@ def download_apk(variant: Variant, path: str = "big_file.apkm"):
 
 def get_variants(version: Version) -> list[Variant]:
     url = version.link
-    variants_page = get_scraper().get(url)
-    if variants_page is None:
-        raise FailedToFetch(url)
+    variants_page = http_get(url)
+    if variants_page.status_code != 200:
+        raise FailedToFetch(f"{url}: {variants_page.status_code}")
 
     variants_page_body = BeautifulSoup(variants_page.content, "html.parser")
 

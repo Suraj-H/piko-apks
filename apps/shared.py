@@ -56,6 +56,14 @@ def ensure_build_cache() -> None:
     os.makedirs(APKM_INPUT_DIR, exist_ok=True)
 
 
+def instagram_version_page(version: str) -> str:
+    slug = version.replace(".", "-")
+    return (
+        "https://www.apkmirror.com/apk/instagram/instagram-instagram/"
+        f"instagram-{slug}-release/"
+    )
+
+
 def version_from_manual(app_id: str, version: str) -> Version:
     if app_id == "x":
         link = (
@@ -64,8 +72,5 @@ def version_from_manual(app_id: str, version: str) -> Version:
         )
         return Version(link=link, version=version)
 
-    link = (
-        f"https://www.apkmirror.com/apk/instagram/instagram-instagram/"
-        f"instagram-{version.replace('.', '-')}-release"
-    )
+    link = instagram_version_page(version)
     return Version(link=link, version=version)

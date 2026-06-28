@@ -1,13 +1,13 @@
 import os
 
-import apkmirror
 from apkmirror import Version
 from apps.instagram import policy, variants
+from apps.instagram.uptodown import download_instagram_apkm
 from apps.shared import (
     PIKO_PATCHES,
     apkm_input_for,
     ensure_build_cache,
-    select_arm64_bundle_variant,
+    instagram_version_page,
 )
 from build_metadata import format_release_notes
 from download_bins import (
@@ -18,7 +18,6 @@ from download_bins import (
 from utils import panic, publish_release, report_to_telegram
 
 APP_ID = "instagram"
-APKMIRROR_URL = "https://www.apkmirror.com/apk/instagram/instagram-instagram/"
 
 
 def resolve_version(
@@ -30,11 +29,12 @@ def resolve_version(
 
         return version_from_manual(APP_ID, manual_version)
 
-    versions = apkmirror.get_versions(APKMIRROR_URL)
-    latest_version = policy.get_best_buildable_version(versions, supported_versions)
-    if latest_version is None:
-        panic("Could not find a supported Instagram version on APKMirror")
-    return latest_version
+    ordered = sorted(supported_versions, key=policy.parse_version_tuple, reverse=True)
+    if not ordered:
+        panic("No piko-supported Instagram versions")
+
+    version_name = ordered[0]
+    return Version(version=version_name, link=instagram_version_page(version_name))
 
 
 def process(
@@ -52,10 +52,7 @@ def process(
     apkm_input = apkm_input_for(APP_ID, latest_version.version)
     ensure_build_cache()
 
-    variants_list = apkmirror.get_variants(latest_version)
-    download_link = select_arm64_bundle_variant(variants_list)
-
-    apkmirror.download_apk(download_link, apkm_input)
+    download_instagram_apkm(latest_version.version, apkm_input)
     if not os.path.exists(apkm_input):
         panic(f"Failed to download Instagram apk bundle: {apkm_input}")
 

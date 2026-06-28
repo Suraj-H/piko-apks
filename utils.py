@@ -5,6 +5,7 @@ import sys
 import requests
 from constants import REPO
 from github import get_last_build_version, get_release_by_tag
+from http_client import get_http_client
 
 _scraper = None
 
@@ -105,7 +106,7 @@ def download(link, out, headers=None, use_scraper=False):
     if use_scraper:
         print(f"Downloading with scraper: {link}")
 
-    session = get_scraper() if use_scraper else requests
+    session = get_http_client() if use_scraper else requests
 
     # https://www.slingacademy.com/article/python-requests-module-how-to-download-files-from-urls/#Streaming_Large_Files
     with session.get(link, stream=True, headers=headers) as r:
