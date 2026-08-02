@@ -11,12 +11,39 @@ class UptodownError(Exception):
     pass
 
 
+def _get_with_retry(client, url: str, *, retries: int = 3, **kwargs) -> object:
+    """GET with retries.
+
+    Uptodown occasionally returns transient errors (observed: a bare 410)
+    to the scraper client that clear up on a plain retry seconds later, so
+    treat any non-2xx/exception as retryable rather than failing outright.
+    """
+    response = None
+    last_error = "unknown error"
+    for attempt in range(retries):
+        try:
+            response = client.get(url, **kwargs)
+            if response.ok:
+                return response
+            last_error = f"HTTP {response.status_code}"
+        except Exception as error:  # noqa: BLE001
+            response = None
+            last_error = str(error)
+        if attempt < retries - 1:
+            print(f"Uptodown request to {url} failed ({last_error}), retrying...")
+            time.sleep(2 * (attempt + 1))
+    if response is not None:
+        return response
+    raise UptodownError(f"Uptodown request to {url} failed: {last_error}")
+
+
 def _find_version_entry(data_code: str, version: str) -> dict:
     client = get_http_client()
     xapk_entry: dict | None = None
 
     for page in range(1, 21):
-        response = client.get(
+        response = _get_with_retry(
+            client,
             f"{INSTAGRAM_UPTODOWN_URL}/apps/{data_code}/versions/{page}",
             timeout=30,
         )
@@ -42,7 +69,7 @@ def _find_version_entry(data_code: str, version: str) -> dict:
 
 def download_instagram_apkm(version: str, dest: str) -> None:
     client = get_http_client()
-    versions_page = client.get(f"{INSTAGRAM_UPTODOWN_URL}/versions", timeout=30)
+    versions_page = _get_with_retry(client, f"{INSTAGRAM_UPTODOWN_URL}/versions", timeout=30)
     versions_page.raise_for_status()
 
     soup = BeautifulSoup(versions_page.text, "html.parser")
@@ -55,7 +82,8 @@ def download_instagram_apkm(version: str, dest: str) -> None:
     version_id = entry["versionURL"]["versionID"]
     print(f"Downloading Instagram {version} from Uptodown (kind={entry.get('kindFile')})")
 
-    download_page = client.get(
+    download_page = _get_with_retry(
+        client,
         f"{INSTAGRAM_UPTODOWN_URL}/download/{version_id}",
         timeout=30,
     )
