@@ -1,10 +1,14 @@
-import re
 from dataclasses import dataclass
 
 import requests
 
-from apkmirror import Version
-from apps.shared import PIKO_PATCHES, X_SHIM_PATCHES
+from apkmirror import Version, version_page_exists
+from apps.shared import (
+    PIKO_PATCHES,
+    X_SHIM_PATCHES,
+    extract_piko_target_versions,
+    x_version_page,
+)
 
 PIKO_CONSTANTS_PATH = (
     "patches/src/main/kotlin/app/crimera/patches/twitter/utils/Constants.kt"
@@ -19,7 +23,6 @@ FALLBACK_SUPPORTED_VERSIONS: tuple[str, ...] = (
 RIPPED_VERSIONS: tuple[str, ...] = ("11.99.0-release-ripped.1",)
 
 _COMPATIBILITY_X_START = "val COMPATIBILITY_X ="
-_COMPATIBILITY_X_END = "val COMPATIBILITY_X_11_69"
 
 
 @dataclass(frozen=True)
@@ -59,20 +62,12 @@ def fetch_supported_versions(piko_ref: str) -> tuple[str, ...]:
         print(f"Failed to fetch piko X supported versions from {piko_ref}: {error}")
         return FALLBACK_SUPPORTED_VERSIONS
 
-    source = response.text
-    start = source.find(_COMPATIBILITY_X_START)
-    end = source.find(_COMPATIBILITY_X_END)
-    if start < 0 or end < 0 or end <= start:
+    versions = extract_piko_target_versions(response.text, _COMPATIBILITY_X_START)
+    if not versions:
         print("Failed to parse piko COMPATIBILITY_X block, using fallback versions")
         return FALLBACK_SUPPORTED_VERSIONS
 
-    block = source[start:end]
-    versions = re.findall(r'version\s*=\s*"([^"]+)"', block)
-    if not versions:
-        print("No piko X target versions found, using fallback versions")
-        return FALLBACK_SUPPORTED_VERSIONS
-
-    return tuple(versions)
+    return versions
 
 
 def get_patch_files(version_name: str) -> tuple[str, ...]:
@@ -97,6 +92,28 @@ def get_best_buildable_version(
             continue
         if version_name in by_name:
             return by_name[version_name]
+    return None
+
+
+def resolve_supported_version_directly(
+    supported: tuple[str, ...],
+) -> Version | None:
+    """Look up piko-supported versions directly on APKMirror by URL.
+
+    get_best_buildable_version only matches versions still on APKMirror's
+    front listing page. Piko often targets a single X version that lags
+    behind X's release cadence, so by the time we check it has usually
+    scrolled past that page even though its APKMirror page still exists.
+    This probes the exact page for each candidate instead of requiring it
+    to be in the recent-listing scrape.
+    """
+    ordered = sorted(supported, key=parse_version_tuple, reverse=True)
+    for version_name in ordered:
+        if version_name in RIPPED_VERSIONS:
+            continue
+        url = x_version_page(version_name)
+        if version_page_exists(url):
+            return Version(link=url, version=version_name)
     return None
 
 

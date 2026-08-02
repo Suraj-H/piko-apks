@@ -1,5 +1,7 @@
 import argparse
+import contextlib
 import os
+import sys
 
 from apps.registry import APP_IDS, get_app
 from apps.build_policy import evaluate_build, log_decision
@@ -90,7 +92,13 @@ if __name__ == "__main__":
     if args.plan:
         if manual:
             panic("--plan cannot be combined with manual builds.")
-        plan = create_build_plan(force=is_force_build())
+        # create_build_plan() logs progress via print() as it resolves each
+        # app's version. Route that to stderr so stdout carries only the
+        # final JSON — the workflow captures stdout via `$(...)` and feeds
+        # it straight to `jq`, which fails to parse if diagnostic lines are
+        # mixed in (silently producing empty outputs, not a visible error).
+        with contextlib.redirect_stdout(sys.stderr):
+            plan = create_build_plan(force=is_force_build())
         print(plan.to_json())
         raise SystemExit(0)
 

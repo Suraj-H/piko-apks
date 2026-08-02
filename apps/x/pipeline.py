@@ -34,6 +34,12 @@ def resolve_version(
     versions = apkmirror.get_versions(APKMIRROR_URL)
     latest_version = policy.get_best_buildable_version(versions, supported_versions)
     if latest_version is None:
+        print(
+            "Piko-supported X version not in APKMirror's recent listing, "
+            "probing direct URLs"
+        )
+        latest_version = policy.resolve_supported_version_directly(supported_versions)
+    if latest_version is None:
         panic("Could not find a supported X release version on APKMirror")
 
     if latest_version.version.find("release") < 0:

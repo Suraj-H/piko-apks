@@ -1,4 +1,5 @@
 import os
+import re
 
 from apkmirror import Variant, Version
 
@@ -6,6 +7,41 @@ APKM_INPUT_DIR = "build-cache"
 PIKO_PATCHES = "bins/patches.mpp"
 X_SHIM_PATCHES = "bins/x-shim.mpp"
 MORPHE_CLI = "bins/morphe-cli.jar"
+
+
+def extract_piko_target_versions(source: str, start_marker: str) -> tuple[str, ...]:
+    """Extract AppTarget version strings from a piko Constants.kt Compatibility(...) block.
+
+    Finds start_marker's Compatibility(...) call and matches balanced
+    parentheses to locate its end, rather than relying on a hardcoded
+    trailing marker (e.g. the next declaration's name) that upstream piko
+    is free to rename, reorder, or remove.
+    """
+    start = source.find(start_marker)
+    if start < 0:
+        return ()
+
+    open_paren = source.find("(", start)
+    if open_paren < 0:
+        return ()
+
+    depth = 0
+    end = -1
+    for i in range(open_paren, len(source)):
+        char = source[i]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    if end < 0:
+        return ()
+
+    block = source[start:end]
+    return tuple(re.findall(r'version\s*=\s*"([^"]+)"', block))
 
 
 def apkm_input_for(app_id: str, version_name: str) -> str:
@@ -64,13 +100,14 @@ def instagram_version_page(version: str) -> str:
     )
 
 
+def x_version_page(version: str) -> str:
+    slug = version.replace(".", "-")
+    return f"https://www.apkmirror.com/apk/x-corp/twitter/x-{slug}-release"
+
+
 def version_from_manual(app_id: str, version: str) -> Version:
     if app_id == "x":
-        link = (
-            f"https://www.apkmirror.com/apk/x-corp/twitter/"
-            f"x-{version.replace('.', '-')}-release"
-        )
-        return Version(link=link, version=version)
+        return Version(link=x_version_page(version), version=version)
 
     link = instagram_version_page(version)
     return Version(link=link, version=version)

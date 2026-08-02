@@ -1,9 +1,7 @@
-import re
-
 import requests
 
 from apkmirror import Version
-from apps.shared import PIKO_PATCHES
+from apps.shared import PIKO_PATCHES, extract_piko_target_versions
 
 PIKO_CONSTANTS_PATH = (
     "patches/src/main/kotlin/app/crimera/patches/instagram/utils/Constants.kt"
@@ -12,7 +10,6 @@ PIKO_CONSTANTS_PATH = (
 FALLBACK_SUPPORTED_VERSIONS: tuple[str, ...] = ("435.0.0.37.76",)
 
 _COMPATIBILITY_IG_START = "val COMPATIBILITY_INSTAGRAM ="
-_COMPATIBILITY_IG_END = "// Instagram classes."
 
 
 def parse_version_tuple(version: str) -> tuple[int, ...]:
@@ -33,22 +30,14 @@ def fetch_supported_versions(piko_ref: str) -> tuple[str, ...]:
         )
         return FALLBACK_SUPPORTED_VERSIONS
 
-    source = response.text
-    start = source.find(_COMPATIBILITY_IG_START)
-    end = source.find(_COMPATIBILITY_IG_END)
-    if start < 0 or end < 0 or end <= start:
+    versions = extract_piko_target_versions(response.text, _COMPATIBILITY_IG_START)
+    if not versions:
         print(
             "Failed to parse piko COMPATIBILITY_INSTAGRAM block, using fallback versions"
         )
         return FALLBACK_SUPPORTED_VERSIONS
 
-    block = source[start:end]
-    versions = re.findall(r'version\s*=\s*"([^"]+)"', block)
-    if not versions:
-        print("No piko Instagram target versions found, using fallback versions")
-        return FALLBACK_SUPPORTED_VERSIONS
-
-    return tuple(versions)
+    return versions
 
 
 def get_best_buildable_version(

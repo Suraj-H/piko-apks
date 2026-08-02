@@ -66,6 +66,21 @@ def get_versions(url: str) -> list[Version]:
     return out
 
 
+def version_page_exists(url: str) -> bool:
+    """Check whether a specific APKMirror version page exists.
+
+    Used as a fallback for versions piko targets that have already scrolled
+    past APKMirror's front listing page (get_versions only scrapes that
+    first page, with no pagination).
+    """
+    try:
+        response = http_get(url)
+    except Exception as error:  # noqa: BLE001
+        print(f"Failed to check {url}: {error}")
+        return False
+    return response.status_code == 200
+
+
 def download_apk(variant: Variant, path: str = "big_file.apkm"):
     """Download apk from the variant link"""
     url = variant.link
