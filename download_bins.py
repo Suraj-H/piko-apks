@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 import requests
 
@@ -28,8 +29,18 @@ def get_latest_github_release(
     version: str | None = None,
 ) -> dict:
     url = f"https://api.github.com/repos/{repo}/releases"
-    response = requests.get(url, timeout=30)
-    if response.status_code != 200:
+    response = None
+    for attempt in range(3):
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            break
+        if attempt < 2:
+            print(
+                f"GitHub releases fetch for {repo} returned "
+                f"{response.status_code}, retrying..."
+            )
+            time.sleep(2 * (attempt + 1))
+    if response is None or response.status_code != 200:
         raise Exception(f"Failed to fetch github releases for {repo}")
 
     releases = [
@@ -86,10 +97,14 @@ def get_latest_piko_release(include_prereleases: bool = True) -> dict:
 
 
 def download_morphe_cli(include_prereleases: bool = False):
+    # MorpheApp/morphe-cli was renamed to MorpheApp/morphe-desktop upstream;
+    # its release assets now use the morphe-desktop-*-all.jar naming.
+    # GitHub's repo-rename redirect still resolves the old slug, but we
+    # point at the current name directly rather than depend on that.
     print("Downloading morphe cli")
     download_release_asset(
-        "MorpheApp/morphe-cli",
-        r"^morphe-cli.*-all\.jar$",
+        "MorpheApp/morphe-desktop",
+        r"^morphe-(cli|desktop).*-all\.jar$",
         "bins",
         "morphe-cli.jar",
         include_prereleases=include_prereleases,
