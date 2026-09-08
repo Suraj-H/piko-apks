@@ -7,7 +7,6 @@ from apps.registry import APP_IDS, get_app
 from apps.build_policy import evaluate_build, log_decision
 from build_planner import create_build_plan
 from constants import REPO
-from download_bins import get_latest_piko_release
 import github
 from utils import panic
 
@@ -18,12 +17,12 @@ def is_force_build() -> bool:
 
 def build_app(app_id: str, *, manual_version: str | None = None) -> None:
     app = get_app(app_id)
-    piko_release = get_latest_piko_release(include_prereleases=True)
-    piko_ref = piko_release["tag_name"]
-    print(f"[{app_id}] Latest piko release: {piko_ref}")
+    patches_release = app.get_patches_release()
+    patches_ref = patches_release["tag_name"]
+    print(f"[{app_id}] Latest patches release: {patches_ref}")
 
-    supported_versions = app.fetch_supported_versions(piko_ref)
-    print(f"[{app_id}] Piko-supported versions: {', '.join(supported_versions)}")
+    supported_versions = app.fetch_supported_versions(patches_ref)
+    print(f"[{app_id}] Supported versions: {', '.join(supported_versions)}")
 
     latest_version = app.resolve_version(supported_versions, manual_version)
     print(f"[{app_id}] Selected version: {latest_version.version}")
@@ -32,6 +31,10 @@ def build_app(app_id: str, *, manual_version: str | None = None) -> None:
     if x_shim_version:
         print(f"[{app_id}] Latest x-shim release: {x_shim_version}")
 
+    patches_version = app.resolve_patches_version(patches_release)
+    if patches_version:
+        print(f"[{app_id}] Latest morphe-patches release: {patches_version}")
+
     last_release = github.get_last_release_for_app(REPO, app_id)
     decision = evaluate_build(
         app_id,
@@ -39,13 +42,14 @@ def build_app(app_id: str, *, manual_version: str | None = None) -> None:
         x_shim_version,
         last_release,
         force=is_force_build(),
+        patches_version=patches_version,
     )
     if not decision.build:
         log_decision(decision)
         return
 
     log_decision(decision)
-    app.process(latest_version, supported_versions, piko_release)
+    app.process(latest_version, supported_versions, patches_release)
 
 
 def run_apps(app_ids: tuple[str, ...], *, manual_version: str | None = None) -> None:
@@ -56,7 +60,7 @@ def run_apps(app_ids: tuple[str, ...], *, manual_version: str | None = None) -> 
 def parse_app_ids(raw: str, *, manual: bool, plan: bool) -> tuple[str, ...]:
     if raw == "all":
         if manual:
-            panic("Manual builds require a single app. Use --app x or --app instagram.")
+            panic("Manual builds require a single app. Use --app x, instagram, or mindicator.")
         if plan:
             return APP_IDS
         return APP_IDS

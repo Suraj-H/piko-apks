@@ -92,8 +92,18 @@ def download_release_asset(
     return latest_release
 
 
+MORPHE_PATCHES_REPO = "rushiranpise/morphe-patches"
+
+
 def get_latest_piko_release(include_prereleases: bool = True) -> dict:
     return get_latest_github_release("crimera/piko", include_prereleases=include_prereleases)
+
+
+def get_latest_morphe_patches_release(include_prereleases: bool = True) -> dict:
+    return get_latest_github_release(
+        MORPHE_PATCHES_REPO,
+        include_prereleases=include_prereleases,
+    )
 
 
 def download_morphe_cli(include_prereleases: bool = False):
@@ -121,6 +131,21 @@ def download_piko_patches(
         r"^patches.*\.mpp$",
         "bins",
         "patches.mpp",
+        include_prereleases=include_prereleases,
+        version=version,
+    )
+
+
+def download_morphe_patches(
+    include_prereleases: bool = True,
+    version: str | None = None,
+):
+    print("Downloading morphe-patches")
+    return download_release_asset(
+        MORPHE_PATCHES_REPO,
+        r"^patches-.*\.mpp$",
+        "bins",
+        "morphe-patches.mpp",
         include_prereleases=include_prereleases,
         version=version,
     )

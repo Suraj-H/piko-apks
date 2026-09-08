@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from apps.build_policy import APP_IDS, BuildDecision, evaluate_build, log_decision
 from apps.registry import get_app
 from constants import REPO
-from download_bins import get_latest_piko_release
 import github
 
 
@@ -32,15 +31,15 @@ class BuildPlan:
 
 
 def create_build_plan(*, force: bool = False) -> BuildPlan:
-    piko_release = get_latest_piko_release(include_prereleases=True)
-    piko_ref = piko_release["tag_name"]
-    print(f"Latest piko release: {piko_ref}")
-
     decisions: dict[str, BuildDecision] = {}
     for app_id in APP_IDS:
         app = get_app(app_id)
-        supported_versions = app.fetch_supported_versions(piko_ref)
-        print(f"[{app_id}] Piko-supported versions: {', '.join(supported_versions)}")
+        patches_release = app.get_patches_release()
+        patches_ref = patches_release["tag_name"]
+        print(f"[{app_id}] Latest patches release: {patches_ref}")
+
+        supported_versions = app.fetch_supported_versions(patches_ref)
+        print(f"[{app_id}] Supported versions: {', '.join(supported_versions)}")
 
         latest_version = app.resolve_version(supported_versions)
         print(f"[{app_id}] Selected version: {latest_version.version}")
@@ -49,6 +48,10 @@ def create_build_plan(*, force: bool = False) -> BuildPlan:
         if x_shim_version:
             print(f"[{app_id}] Latest x-shim release: {x_shim_version}")
 
+        patches_version = app.resolve_patches_version(patches_release)
+        if patches_version:
+            print(f"[{app_id}] Latest morphe-patches release: {patches_version}")
+
         last_release = github.get_last_release_for_app(REPO, app_id)
         decision = evaluate_build(
             app_id,
@@ -56,6 +59,7 @@ def create_build_plan(*, force: bool = False) -> BuildPlan:
             x_shim_version,
             last_release,
             force=force,
+            patches_version=patches_version,
         )
         log_decision(decision)
         decisions[app_id] = decision
