@@ -9,9 +9,10 @@ on:
         options:
           - x
           - instagram
+          - mindicator
         required: true
       version_input:
-        description: "App version (e.g. 12.2.0-release.0 or 435.0.0.37.76)"
+        description: "App version (e.g. 12.2.0-release.0, 435.0.0.37.76, or 18.0.364)"
         required: true
       force:
         description: "Rebuild even if versions are unchanged"
