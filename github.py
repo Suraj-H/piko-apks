@@ -68,7 +68,7 @@ def get_last_release_for_app(repo_url: str, app_id: str) -> GithubRelease | None
 
     for release in list_releases(repo_url):
         metadata = parse_build_metadata(release.body)
-        if metadata is not None and metadata["app"] == app_id:
+        if metadata is not None and metadata.app == app_id:
             return release
 
         if app_id == "instagram" and release.tag_name.startswith("ig-"):
