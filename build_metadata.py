@@ -1,16 +1,37 @@
 import re
+from dataclasses import dataclass
 from typing import TypedDict
 
 
-class BuildMetadata(TypedDict):
+class PikoBuildMetadata(TypedDict):
     app: str
     app_version: str
     piko_version: str
     x_shim_version: str
 
 
+class MorpheBuildMetadata(TypedDict):
+    app: str
+    app_version: str
+    patches_source: str
+    patches_version: str
+
+
+BuildMetadata = PikoBuildMetadata | MorpheBuildMetadata
+
+
+@dataclass(frozen=True)
+class ParsedBuildMetadata:
+    app: str
+    app_version: str
+    piko_version: str | None = None
+    x_shim_version: str | None = None
+    patches_source: str | None = None
+    patches_version: str | None = None
+
+
 _METADATA_LINE = re.compile(
-    r"^- (app|app_version|piko_version|x_shim_version|x_version): (.+)$",
+    r"^- (app|app_version|piko_version|x_shim_version|x_version|patches_source|patches_version): (.+)$",
     re.MULTILINE,
 )
 
@@ -31,7 +52,21 @@ def format_build_metadata(
     )
 
 
-def parse_build_metadata(body: str) -> BuildMetadata | None:
+def format_mindicator_metadata(
+    app_version: str,
+    patches_source: str,
+    patches_version: str,
+) -> str:
+    return (
+        "Build metadata:\n"
+        "- app: mindicator\n"
+        f"- app_version: {app_version}\n"
+        f"- patches_source: {patches_source}\n"
+        f"- patches_version: {patches_version}"
+    )
+
+
+def parse_build_metadata(body: str) -> ParsedBuildMetadata | None:
     if "Build metadata:" not in body:
         return None
 
@@ -43,15 +78,33 @@ def parse_build_metadata(body: str) -> BuildMetadata | None:
         values["app"] = "x"
         values["app_version"] = values["x_version"]
 
-    required = ("app", "app_version", "piko_version", "x_shim_version")
-    if not all(key in values for key in required):
+    app = values.get("app")
+    app_version = values.get("app_version")
+    if app is None or app_version is None:
         return None
 
-    return BuildMetadata(
-        app=values["app"],
-        app_version=values["app_version"],
-        piko_version=values["piko_version"],
-        x_shim_version=values["x_shim_version"],
+    if app == "mindicator":
+        patches_source = values.get("patches_source")
+        patches_version = values.get("patches_version")
+        if patches_source is None or patches_version is None:
+            return None
+        return ParsedBuildMetadata(
+            app=app,
+            app_version=app_version,
+            patches_source=patches_source,
+            patches_version=patches_version,
+        )
+
+    piko_version = values.get("piko_version")
+    x_shim_version = values.get("x_shim_version")
+    if piko_version is None or x_shim_version is None:
+        return None
+
+    return ParsedBuildMetadata(
+        app=app,
+        app_version=app_version,
+        piko_version=piko_version,
+        x_shim_version=x_shim_version,
     )
 
 
@@ -68,6 +121,23 @@ def format_release_notes(
 [piko-{piko_tag}]({piko_url})
 
 {app_label} {app_version}
+
+{metadata}
+"""
+
+
+def format_mindicator_release_notes(
+    app_version: str,
+    patches_tag: str,
+    patches_url: str,
+    patches_source: str,
+) -> str:
+    patches_version = patches_tag.removeprefix("v")
+    metadata = format_mindicator_metadata(app_version, patches_source, patches_version)
+    return f"""Changelogs:
+[morphe-patches-{patches_tag}]({patches_url})
+
+m-Indicator {app_version}
 
 {metadata}
 """
