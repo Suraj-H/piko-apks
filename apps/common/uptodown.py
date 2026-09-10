@@ -8,6 +8,13 @@ class UptodownError(Exception):
     pass
 
 
+def _raise_for_status(response, url: str) -> None:
+    try:
+        response.raise_for_status()
+    except Exception as error:  # noqa: BLE001
+        raise UptodownError(f"Uptodown request to {url} failed: {error}") from error
+
+
 def _get_with_retry(client, url: str, *, retries: int = 3, **kwargs) -> object:
     """GET with retries.
 
@@ -29,8 +36,6 @@ def _get_with_retry(client, url: str, *, retries: int = 3, **kwargs) -> object:
         if attempt < retries - 1:
             print(f"Uptodown request to {url} failed ({last_error}), retrying...")
             time.sleep(2 * (attempt + 1))
-    if response is not None:
-        return response
     raise UptodownError(f"Uptodown request to {url} failed: {last_error}")
 
 
@@ -39,12 +44,9 @@ def _find_version_entry(base_url: str, data_code: str, version: str) -> dict:
     xapk_entry: dict | None = None
 
     for page in range(1, 21):
-        response = _get_with_retry(
-            client,
-            f"{base_url}/apps/{data_code}/versions/{page}",
-            timeout=30,
-        )
-        response.raise_for_status()
+        versions_url = f"{base_url}/apps/{data_code}/versions/{page}"
+        response = _get_with_retry(client, versions_url, timeout=30)
+        _raise_for_status(response, versions_url)
         payload = response.json()
         entries = payload.get("data") or []
         if not entries:
@@ -71,8 +73,9 @@ def download_uptodown_bundle(
     dest: str,
 ) -> None:
     client = get_http_client()
-    versions_page = _get_with_retry(client, f"{base_url}/versions", timeout=30)
-    versions_page.raise_for_status()
+    versions_url = f"{base_url}/versions"
+    versions_page = _get_with_retry(client, versions_url, timeout=30)
+    _raise_for_status(versions_page, versions_url)
 
     soup = BeautifulSoup(versions_page.text, "html.parser")
     app_node = soup.select_one("#detail-app-name")
@@ -87,12 +90,9 @@ def download_uptodown_bundle(
         f"(kind={entry.get('kindFile')})"
     )
 
-    download_page = _get_with_retry(
-        client,
-        f"{base_url}/download/{version_id}",
-        timeout=30,
-    )
-    download_page.raise_for_status()
+    download_url_page = f"{base_url}/download/{version_id}"
+    download_page = _get_with_retry(client, download_url_page, timeout=30)
+    _raise_for_status(download_page, download_url_page)
     soup = BeautifulSoup(download_page.text, "html.parser")
     button = soup.select_one("#detail-download-button")
     if button is None or not button.get("data-url"):
@@ -101,7 +101,7 @@ def download_uptodown_bundle(
     download_url = f"https://dw.uptodown.com/dwn/{button['data-url']}"
     response = client.get(download_url, timeout=(30, 600), stream=True, allow_redirects=True)
     try:
-        response.raise_for_status()
+        _raise_for_status(response, download_url)
         with open(dest, "wb") as handle:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
