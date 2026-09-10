@@ -1,83 +1,56 @@
-import re
 import time
-from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
 from http_client import get_http_client
 
 from apps.mindicator.bundle import bundle_has_arm64
 
-APKPURE_SLUG = "m-indicator-mumbai-local"
 PACKAGE_NAME = "com.mobond.mindicator"
-APKPURE_BASE_URL = f"https://apkpure.com/{APKPURE_SLUG}/{PACKAGE_NAME}"
+APKPURE_CDN_BASE = "https://d.apkpure.net/b/XAPK"
 
 
 class ApkPureError(Exception):
     pass
 
 
-def _page_has_arm64_variant(html: str, version: str) -> bool:
-    lowered = html.lower()
-    if version not in html:
-        return False
-    version_index = lowered.find(version.lower())
-    if version_index < 0:
-        return False
-    window = lowered[max(0, version_index - 200) : version_index + 400]
-    return "arm64" in window
+def version_name_to_version_code(version: str) -> int:
+    """m-Indicator versionCode matches the last dotted segment (e.g. 18.0.364 -> 364)."""
+    segment = version.rsplit(".", 1)[-1]
+    if not segment.isdigit():
+        raise ApkPureError(f"Cannot derive APKPure versionCode from {version}")
+    return int(segment)
 
 
-def _extract_download_url(html: str) -> str | None:
-    soup = BeautifulSoup(html, "html.parser")
-    for anchor in soup.select("a[href]"):
-        href = anchor.get("href", "")
-        if not href:
-            continue
-        if "d.apkpure.com" in href and (".xapk" in href.lower() or "/b/xapk/" in href.lower()):
-            return href
-        if "/b/XAPK/" in href or "/b/APK/" in href:
-            return urljoin(APKPURE_BASE_URL, href)
-
-    match = re.search(r"https://d\.apkpure\.com/[^\"'\s>]+", html)
-    if match:
-        return match.group(0)
-
-    return None
+def _cdn_download_url(version_code: int) -> str:
+    return f"{APKPURE_CDN_BASE}/{PACKAGE_NAME}?versionCode={version_code}"
 
 
 def download_mindicator_bundle(version: str, dest: str) -> None:
+    version_code = version_name_to_version_code(version)
+    download_url = _cdn_download_url(version_code)
+    print(
+        f"Downloading m-Indicator {version} from APKPure CDN "
+        f"(versionCode={version_code}): {download_url}"
+    )
+
     client = get_http_client()
-    page_url = f"{APKPURE_BASE_URL}/download/{version}"
-    print(f"Trying APKPure fallback for m-Indicator {version}: {page_url}")
-
-    response = client.get(page_url, timeout=30)
-    if not response.ok:
-        raise ApkPureError(f"APKPure page returned HTTP {response.status_code}")
-
-    if not _page_has_arm64_variant(response.text, version):
-        raise ApkPureError(
-            f"APKPure listing for m-Indicator {version} does not advertise arm64"
-        )
-
-    download_url = _extract_download_url(response.text)
-    if download_url is None:
-        raise ApkPureError(f"Could not find APKPure download link for {version}")
-
-    print(f"Downloading m-Indicator {version} from APKPure")
-    download_response = client.get(
+    response = client.get(
         download_url,
         timeout=(30, 600),
         stream=True,
         allow_redirects=True,
     )
     try:
-        download_response.raise_for_status()
+        if not response.ok:
+            raise ApkPureError(
+                f"APKPure CDN returned HTTP {response.status_code} "
+                f"for versionCode {version_code}"
+            )
         with open(dest, "wb") as handle:
-            for chunk in download_response.iter_content(chunk_size=1024 * 1024):
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     handle.write(chunk)
     finally:
-        download_response.close()
+        response.close()
 
     if not bundle_has_arm64(dest):
         raise ApkPureError(
