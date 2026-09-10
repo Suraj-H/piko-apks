@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from apkmirror import Version
-from apps.build_policy import APP_IDS
+from apps.build_policy import ALL_APP_IDS, APP_IDS, MINDICATOR_APP_ID
 
 
 @dataclass(frozen=True)
@@ -11,8 +11,12 @@ class AppSpec:
     policy_module: object
     pipeline_module: object
 
-    def fetch_supported_versions(self, piko_ref: str) -> tuple[str, ...]:
-        return self.policy_module.fetch_supported_versions(piko_ref)
+    def fetch_supported_versions(self, ref: str) -> tuple[str, ...]:
+        if self.app_id == MINDICATOR_APP_ID:
+            from download_bins import normalize_morphe_tag
+
+            return self.policy_module.fetch_supported_versions(normalize_morphe_tag(ref))
+        return self.policy_module.fetch_supported_versions(ref)
 
     def release_tag(self, version_name: str) -> str:
         return self.policy_module.release_tag(version_name)
@@ -24,7 +28,14 @@ class AppSpec:
     ) -> Version:
         return self.pipeline_module.resolve_version(supported_versions, manual_version)
 
-    def process(self, version: Version, supported: tuple[str, ...], piko_release: dict) -> None:
+    def process(
+        self,
+        version: Version,
+        supported: tuple[str, ...],
+        release: dict,
+        *,
+        manual_version: str | None = None,
+    ) -> None:
         if self.app_id == "x":
             from apps.x.pipeline import resolve_x_shim_version
 
@@ -32,12 +43,21 @@ class AppSpec:
             self.pipeline_module.process(
                 version,
                 supported,
-                piko_release,
+                release,
                 x_shim_version,
             )
             return
 
-        self.pipeline_module.process(version, supported, piko_release)
+        if self.app_id == MINDICATOR_APP_ID:
+            self.pipeline_module.process(
+                version,
+                supported,
+                release,
+                manual_version=manual_version,
+            )
+            return
+
+        self.pipeline_module.process(version, supported, release)
 
     def resolve_extra_version(self, version_name: str) -> str | None:
         if self.app_id != "x":
@@ -58,4 +78,14 @@ def get_app(app_id: str) -> AppSpec:
 
         return AppSpec("instagram", "Instagram", instagram.policy, instagram.pipeline)
 
-    raise ValueError(f"Unknown app: {app_id}. Expected one of: {', '.join(APP_IDS)}")
+    if app_id == MINDICATOR_APP_ID:
+        from apps import mindicator
+
+        return AppSpec(
+            MINDICATOR_APP_ID,
+            "m-Indicator",
+            mindicator.policy,
+            mindicator.pipeline,
+        )
+
+    raise ValueError(f"Unknown app: {app_id}. Expected one of: {', '.join(ALL_APP_IDS)}")

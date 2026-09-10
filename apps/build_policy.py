@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 
-from build_metadata import BuildMetadata, parse_build_metadata
+from build_metadata import ParsedBuildMetadata, parse_build_metadata
 from github import GithubRelease
 
-APP_IDS = ("x", "instagram")
+SCHEDULED_APP_IDS = ("x", "instagram")
+MINDICATOR_APP_ID = "mindicator"
+ALL_APP_IDS = (*SCHEDULED_APP_IDS, MINDICATOR_APP_ID)
+APP_IDS = SCHEDULED_APP_IDS
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ def evaluate_build(
     last_release: GithubRelease | None,
     *,
     force: bool = False,
+    patches_version: str | None = None,
 ) -> BuildDecision:
     if force:
         return BuildDecision(app_id, True, app_version, ("force",))
@@ -37,8 +41,8 @@ def evaluate_build(
             ("no previous release",),
         )
 
-    metadata: BuildMetadata | None = parse_build_metadata(last_release.body)
-    if metadata is None or metadata["app"] != app_id:
+    metadata: ParsedBuildMetadata | None = parse_build_metadata(last_release.body)
+    if metadata is None or metadata.app != app_id:
         return BuildDecision(
             app_id,
             True,
@@ -46,12 +50,20 @@ def evaluate_build(
             ("release metadata missing",),
         )
 
-    shim = normalize_shim_version(x_shim_version)
     reasons: list[str] = []
-    if metadata["app_version"] != app_version:
-        reasons.append(f"app {metadata['app_version']} -> {app_version}")
-    if app_id == "x" and metadata["x_shim_version"] != shim:
-        reasons.append(f"x-shim {metadata['x_shim_version']} -> {shim}")
+    if metadata.app_version != app_version:
+        reasons.append(f"app {metadata.app_version} -> {app_version}")
+
+    if app_id == "x":
+        shim = normalize_shim_version(x_shim_version)
+        if metadata.x_shim_version != shim:
+            reasons.append(f"x-shim {metadata.x_shim_version} -> {shim}")
+
+    if app_id == MINDICATOR_APP_ID and patches_version is not None:
+        if metadata.patches_version != patches_version:
+            reasons.append(
+                f"patches {metadata.patches_version} -> {patches_version}"
+            )
 
     return BuildDecision(app_id, bool(reasons), app_version, tuple(reasons))
 

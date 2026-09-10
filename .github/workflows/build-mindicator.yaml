@@ -1,0 +1,73 @@
+name: Release - m-Indicator
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_input:
+        description: "Optional app version override (defaults to morphe patches pin)"
+        required: false
+      force:
+        description: "Rebuild even if app/patches versions are unchanged"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: piko-release-mindicator
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "21"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Restore signing keystore
+        env:
+          APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          : "${APK_KEYSTORE_BASE64:?Missing APK_KEYSTORE_BASE64 secret}"
+          : "${APK_KEYSTORE_PASSWORD:?Missing APK_KEYSTORE_PASSWORD secret}"
+          : "${APK_KEY_ALIAS:?Missing APK_KEY_ALIAS secret}"
+          : "${APK_KEY_PASSWORD:?Missing APK_KEY_PASSWORD secret}"
+          mkdir -p signing
+          printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
+
+      - name: Build and publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+          FORCE_BUILD: ${{ github.event.inputs.force == 'true' && '1' || '' }}
+          APK_KEYSTORE_PATH: signing/release.keystore
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          mkdir -p bins
+          if [ -n "${{ github.event.inputs.version_input }}" ]; then
+            uv run main.py --app mindicator --m 1 --v "${{ github.event.inputs.version_input }}"
+          else
+            uv run main.py --app mindicator
+          fi

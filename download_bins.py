@@ -9,6 +9,11 @@ from utils import download
 X_SHIM_VERSION = os.environ.get("X_SHIM_VERSION")
 APKSIG_VERSION = os.environ.get("APKSIG_VERSION", "8.7.3")
 X_SHIM_BUNDLE_URL = "https://gitlab.com/inotia00/x-shim/-/raw/main/patches-bundle.json"
+MORPHE_PATCHES_REPO = "rushiranpise/morphe-patches"
+
+
+def normalize_morphe_tag(tag: str) -> str:
+    return tag.removeprefix("v")
 
 
 def fetch_latest_x_shim_version() -> str:
@@ -122,6 +127,24 @@ def download_piko_patches(
         "bins",
         "patches.mpp",
         include_prereleases=include_prereleases,
+        version=version,
+    )
+
+
+def get_latest_morphe_patches_release(include_prereleases: bool = False) -> dict:
+    return get_latest_github_release(
+        MORPHE_PATCHES_REPO,
+        include_prereleases=include_prereleases,
+    )
+
+
+def download_morphe_patches(version: str | None = None):
+    print("Downloading morphe patches")
+    return download_release_asset(
+        MORPHE_PATCHES_REPO,
+        r"^patches-.*\.mpp$",
+        "bins",
+        "morphe-patches.mpp",
         version=version,
     )
 
