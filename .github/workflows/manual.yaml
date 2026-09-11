@@ -50,16 +50,23 @@ jobs:
       - name: Restore signing keystore
         env:
           APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
-          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
-          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
-          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD != '' && secrets.APK_KEYSTORE_PASSWORD || '123456789' }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS != '' && secrets.APK_KEY_ALIAS || 'jhc' }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD != '' && secrets.APK_KEY_PASSWORD || '123456789' }}
         run: |
-          : "${APK_KEYSTORE_BASE64:?Missing APK_KEYSTORE_BASE64 secret}"
-          : "${APK_KEYSTORE_PASSWORD:?Missing APK_KEYSTORE_PASSWORD secret}"
-          : "${APK_KEY_ALIAS:?Missing APK_KEY_ALIAS secret}"
-          : "${APK_KEY_PASSWORD:?Missing APK_KEY_PASSWORD secret}"
           mkdir -p signing
-          printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
+          if [ -n "${APK_KEYSTORE_BASE64:-}" ]; then
+            : "${APK_KEYSTORE_PASSWORD:?Missing APK_KEYSTORE_PASSWORD secret}"
+            : "${APK_KEY_ALIAS:?Missing APK_KEY_ALIAS secret}"
+            : "${APK_KEY_PASSWORD:?Missing APK_KEY_PASSWORD secret}"
+            printf '%s' "$APK_KEYSTORE_BASE64" | base64 --decode > signing/release.keystore
+          else
+            echo "No APK_KEYSTORE_BASE64 secret; using committed ks.keystore (stock defaults)"
+            cp ks.keystore signing/release.keystore
+            echo "APK_KEYSTORE_PASSWORD=123456789" >> "$GITHUB_ENV"
+            echo "APK_KEY_ALIAS=jhc" >> "$GITHUB_ENV"
+            echo "APK_KEY_PASSWORD=123456789" >> "$GITHUB_ENV"
+          fi
 
       - name: Build and publish release
         env:
@@ -69,9 +76,9 @@ jobs:
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
           FORCE_BUILD: ${{ github.event.inputs.force == 'true' && '1' || '' }}
           APK_KEYSTORE_PATH: signing/release.keystore
-          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD }}
-          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
-          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+          APK_KEYSTORE_PASSWORD: ${{ secrets.APK_KEYSTORE_PASSWORD != '' && secrets.APK_KEYSTORE_PASSWORD || '123456789' }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS != '' && secrets.APK_KEY_ALIAS || 'jhc' }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD != '' && secrets.APK_KEY_PASSWORD || '123456789' }}
         run: |
           mkdir -p bins
           uv run main.py --app ${{ github.event.inputs.app }} --m 1 --v ${{ github.event.inputs.version_input }}
