@@ -4,16 +4,57 @@ import os
 import sys
 
 from apps.registry import ALL_APP_IDS, APP_IDS, get_app
-from apps.build_policy import MINDICATOR_APP_ID, evaluate_build, log_decision
+from apps.build_policy import MINDICATOR_APP_ID, NEWX_APP_ID, evaluate_build, log_decision
 from build_planner import create_build_plan
 from constants import REPO
-from download_bins import get_latest_morphe_patches_release, get_latest_piko_release, normalize_morphe_tag
+from download_bins import (
+    get_latest_morphe_patches_release,
+    get_latest_piko_newx_release,
+    get_latest_piko_release,
+    normalize_morphe_tag,
+)
 import github
 from utils import panic
 
 
 def is_force_build() -> bool:
     return os.environ.get("FORCE_BUILD", "").strip().lower() in ("1", "true", "yes")
+
+
+def build_newx_app(*, manual_version: str | None = None) -> None:
+    from apps.newx import policy
+
+    patches_release = get_latest_piko_newx_release()
+    patches_version = patches_release["tag_name"].removeprefix("v")
+    print(f"[newx] Latest piko-newx release: {patches_release['tag_name']}")
+
+    supported_versions = policy.fetch_supported_versions(patches_release["tag_name"])
+    print(f"[newx] piko-newx target version: {', '.join(supported_versions)}")
+
+    app = get_app(NEWX_APP_ID)
+    latest_version = app.resolve_version(supported_versions, manual_version)
+    print(f"[newx] Selected version: {latest_version.version}")
+
+    last_release = github.get_last_release_for_app(REPO, NEWX_APP_ID)
+    decision = evaluate_build(
+        NEWX_APP_ID,
+        latest_version.version,
+        None,
+        last_release,
+        force=is_force_build(),
+        patches_version=patches_version,
+    )
+    if not decision.build:
+        log_decision(decision)
+        return
+
+    log_decision(decision)
+    app.process(
+        latest_version,
+        supported_versions,
+        patches_release,
+        manual_version=manual_version,
+    )
 
 
 def build_mindicator_app(*, manual_version: str | None = None) -> None:
@@ -57,6 +98,10 @@ def build_app(app_id: str, *, manual_version: str | None = None) -> None:
         build_mindicator_app(manual_version=manual_version)
         return
 
+    if app_id == NEWX_APP_ID:
+        build_newx_app(manual_version=manual_version)
+        return
+
     app = get_app(app_id)
     piko_release = get_latest_piko_release(include_prereleases=True)
     piko_ref = piko_release["tag_name"]
@@ -98,7 +143,7 @@ def parse_app_ids(raw: str, *, manual: bool, plan: bool) -> tuple[str, ...]:
         if manual:
             panic(
                 "Manual builds require a single app. "
-                "Use --app x, --app instagram, or --app mindicator."
+                "Use --app x, --app instagram, --app mindicator, or --app newx."
             )
         if plan:
             return APP_IDS
@@ -135,8 +180,11 @@ if __name__ == "__main__":
     if args.plan:
         if manual:
             panic("--plan cannot be combined with manual builds.")
-        if args.app == MINDICATOR_APP_ID:
-            panic("m-Indicator uses its own workflow; --plan is only for scheduled apps.")
+        if args.app in (MINDICATOR_APP_ID, NEWX_APP_ID):
+            panic(
+                "m-Indicator and NewX use their own workflows; "
+                "--plan is only for scheduled apps."
+            )
         # create_build_plan() logs progress via print() as it resolves each
         # app's version. Route that to stderr so stdout carries only the
         # final JSON — the workflow captures stdout via `$(...)` and feeds

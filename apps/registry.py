@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from apkmirror import Version
-from apps.build_policy import ALL_APP_IDS, APP_IDS, MINDICATOR_APP_ID
+from apps.build_policy import ALL_APP_IDS, APP_IDS, MINDICATOR_APP_ID, NEWX_APP_ID
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,8 @@ class AppSpec:
             from download_bins import normalize_morphe_tag
 
             return self.policy_module.fetch_supported_versions(normalize_morphe_tag(ref))
+        if self.app_id == NEWX_APP_ID:
+            return self.policy_module.fetch_supported_versions(ref)
         return self.policy_module.fetch_supported_versions(ref)
 
     def release_tag(self, version_name: str) -> str:
@@ -48,7 +50,7 @@ class AppSpec:
             )
             return
 
-        if self.app_id == MINDICATOR_APP_ID:
+        if self.app_id in (MINDICATOR_APP_ID, NEWX_APP_ID):
             self.pipeline_module.process(
                 version,
                 supported,
@@ -86,6 +88,16 @@ def get_app(app_id: str) -> AppSpec:
             "m-Indicator",
             mindicator.policy,
             mindicator.pipeline,
+        )
+
+    if app_id == NEWX_APP_ID:
+        from apps import newx
+
+        return AppSpec(
+            NEWX_APP_ID,
+            "NewX",
+            newx.policy,
+            newx.pipeline,
         )
 
     raise ValueError(f"Unknown app: {app_id}. Expected one of: {', '.join(ALL_APP_IDS)}")

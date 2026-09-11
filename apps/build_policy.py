@@ -5,7 +5,8 @@ from github import GithubRelease
 
 SCHEDULED_APP_IDS = ("x", "instagram")
 MINDICATOR_APP_ID = "mindicator"
-ALL_APP_IDS = (*SCHEDULED_APP_IDS, MINDICATOR_APP_ID)
+NEWX_APP_ID = "newx"
+ALL_APP_IDS = (*SCHEDULED_APP_IDS, MINDICATOR_APP_ID, NEWX_APP_ID)
 APP_IDS = SCHEDULED_APP_IDS
 
 
@@ -59,7 +60,7 @@ def evaluate_build(
         if metadata.x_shim_version != shim:
             reasons.append(f"x-shim {metadata.x_shim_version} -> {shim}")
 
-    if app_id == MINDICATOR_APP_ID and patches_version is not None:
+    if app_id in (MINDICATOR_APP_ID, NEWX_APP_ID) and patches_version is not None:
         if metadata.patches_version != patches_version:
             reasons.append(
                 f"patches {metadata.patches_version} -> {patches_version}"

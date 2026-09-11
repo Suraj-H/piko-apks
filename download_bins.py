@@ -10,6 +10,7 @@ X_SHIM_VERSION = os.environ.get("X_SHIM_VERSION")
 APKSIG_VERSION = os.environ.get("APKSIG_VERSION", "8.7.3")
 X_SHIM_BUNDLE_URL = "https://gitlab.com/inotia00/x-shim/-/raw/main/patches-bundle.json"
 MORPHE_PATCHES_REPO = "rushiranpise/morphe-patches"
+PIKO_NEWX_REPO = "crimera/piko-newx"
 
 
 def normalize_morphe_tag(tag: str) -> str:
@@ -158,6 +159,34 @@ def download_x_shim(version: str | None = None):
     )
     download(url, "bins/x-shim.mpp")
     return resolved_version
+
+
+def get_latest_piko_newx_release(include_prereleases: bool = False) -> dict:
+    return get_latest_github_release(
+        PIKO_NEWX_REPO,
+        include_prereleases=include_prereleases,
+    )
+
+
+def download_piko_newx_patches(version: str | None = None):
+    print("Downloading piko-newx patches")
+    return download_release_asset(
+        PIKO_NEWX_REPO,
+        r"^patches.*\.mpp$",
+        "bins",
+        "newx-patches.mpp",
+        version=version,
+    )
+
+
+def fetch_piko_newx_bundle(ref: str) -> dict:
+    url = f"https://raw.githubusercontent.com/{PIKO_NEWX_REPO}/{ref}/patches-bundle.json"
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError(f"{PIKO_NEWX_REPO} patches-bundle.json must be a JSON object")
+    return payload
 
 
 def download_apksig(version: str = APKSIG_VERSION):
