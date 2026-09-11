@@ -5,6 +5,7 @@ from apkmirror import Variant, Version
 
 APKM_INPUT_DIR = "build-cache"
 PIKO_PATCHES = "bins/patches.mpp"
+NEWX_PATCHES = "bins/newx-patches.mpp"
 MORPHE_PATCHES = "bins/morphe-patches.mpp"
 X_SHIM_PATCHES = "bins/x-shim.mpp"
 MORPHE_CLI = "bins/morphe-cli.jar"
@@ -107,7 +108,7 @@ def x_version_page(version: str) -> str:
 
 
 def version_from_manual(app_id: str, version: str) -> Version:
-    if app_id == "x":
+    if app_id in ("x", "newx"):
         return Version(link=x_version_page(version), version=version)
 
     if app_id == "mindicator":

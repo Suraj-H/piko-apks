@@ -17,7 +17,14 @@ class MorpheBuildMetadata(TypedDict):
     patches_version: str
 
 
-BuildMetadata = PikoBuildMetadata | MorpheBuildMetadata
+class NewxBuildMetadata(TypedDict):
+    app: str
+    app_version: str
+    patches_source: str
+    patches_version: str
+
+
+BuildMetadata = PikoBuildMetadata | MorpheBuildMetadata | NewxBuildMetadata
 
 
 @dataclass(frozen=True)
@@ -83,7 +90,7 @@ def parse_build_metadata(body: str) -> ParsedBuildMetadata | None:
     if app is None or app_version is None:
         return None
 
-    if app == "mindicator":
+    if app in ("mindicator", "newx"):
         patches_source = values.get("patches_source")
         patches_version = values.get("patches_version")
         if patches_source is None or patches_version is None:
@@ -121,6 +128,37 @@ def format_release_notes(
 [piko-{piko_tag}]({piko_url})
 
 {app_label} {app_version}
+
+{metadata}
+"""
+
+
+def format_newx_metadata(
+    app_version: str,
+    patches_source: str,
+    patches_version: str,
+) -> str:
+    return (
+        "Build metadata:\n"
+        "- app: newx\n"
+        f"- app_version: {app_version}\n"
+        f"- patches_source: {patches_source}\n"
+        f"- patches_version: {patches_version}"
+    )
+
+
+def format_newx_release_notes(
+    app_version: str,
+    patches_tag: str,
+    patches_url: str,
+    patches_source: str,
+) -> str:
+    patches_version = patches_tag.removeprefix("v")
+    metadata = format_newx_metadata(app_version, patches_source, patches_version)
+    return f"""Changelogs:
+[piko-newx-{patches_tag}]({patches_url})
+
+X {app_version} (NewX)
 
 {metadata}
 """
