@@ -1,10 +1,22 @@
 from dataclasses import dataclass
 from urllib.parse import quote
+import os
 
 import requests
-from constants import HEADERS
 
 REQUEST_TIMEOUT_SECONDS = 30
+
+
+def _api_headers() -> dict[str, str]:
+    """GitHub REST headers. Private repos need GITHUB_TOKEN (Actions provides it)."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 @dataclass
@@ -36,7 +48,7 @@ def _to_github_release(release) -> GithubRelease:
 
 
 def _fetch_release(url: str) -> GithubRelease | None:
-    response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
+    response = requests.get(url, headers=_api_headers(), timeout=REQUEST_TIMEOUT_SECONDS)
 
     if response.status_code == 404:
         return None
@@ -47,7 +59,9 @@ def _fetch_release(url: str) -> GithubRelease | None:
 
 def list_releases(repo_url: str, per_page: int = 30) -> list[GithubRelease]:
     url = f"https://api.github.com/repos/{repo_url}/releases?per_page={per_page}"
-    response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT_SECONDS)
+    response = requests.get(url, headers=_api_headers(), timeout=REQUEST_TIMEOUT_SECONDS)
+    if response.status_code == 404:
+        return []
     response.raise_for_status()
     return [_to_github_release(release) for release in response.json()]
 
